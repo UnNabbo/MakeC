@@ -499,10 +499,10 @@ project NewProject(const char * Name, u32 Kind, u32 CompilerKind){
 	ZeroStruct(Project);
 	
 	Project.Name = cstralloc(Name);
-	Project.Path = cstralloc(Name);
+	Project.Path = 0;
 	
 	Project.OutputName = cstralloc(Name);
-	Project.OutputPath = cstralloc("out");
+	Project.OutputPath = 0;
 	
 	Project.Compiler.Kind = CompilerKind;
 	Project.Compiler.OutputKind = Kind;
@@ -673,7 +673,6 @@ void AddFilesToProject(project* Project, const char * PathAndExtension){
 		strcatre(&Path, "/");
 	}
 	strcatre(&Path, PathAndExtension);
-	
     HANDLE hFind = FindFirstFile(Path, &fd);
 	int Amount = 0;
     if(hFind != INVALID_HANDLE_VALUE) { 
@@ -720,8 +719,13 @@ char * FormatWithProjectData(project * Project){
 				
 			}
 			
-			const char * ObjOutput = (Project->OutputPath) ? Project->OutputPath : "./";
-			sprintf(Buffer, "cl /nologo /FC /Fo:\"%s/\" %s%s%s%s%s%s/link %s%s%s/OUT:%s/%s%s", ObjOutput, __EMPTY_IF_NULL(Project->Compiler.CompilationFlags), __EMPTY_IF_NULL(Project->Defines), OutputKindSpeficCompilerFlags, __EMPTY_IF_NULL(Project->Files), __EMPTY_IF_NULL(Project->IncludeDirectories), __EMPTY_IF_NULL(Project->Libraries), __EMPTY_IF_NULL(Project->Compiler.LinkerFlags), OutputKindSpeficLinkerFlags, __EMPTY_IF_NULL(Project->LibrariesDirectories),Project->OutputPath, Project->OutputName, OutputExtension);
+			const char * ObjOutput = (Project->OutputPath) ? Project->OutputPath : ".";
+			sprintf(Buffer, "cl /nologo /FC /Fo:\"%s/\" %s%s%s%s%s%s/link %s%s%s", ObjOutput, __EMPTY_IF_NULL(Project->Compiler.CompilationFlags), __EMPTY_IF_NULL(Project->Defines), OutputKindSpeficCompilerFlags, __EMPTY_IF_NULL(Project->Files), __EMPTY_IF_NULL(Project->IncludeDirectories), __EMPTY_IF_NULL(Project->Libraries), __EMPTY_IF_NULL(Project->Compiler.LinkerFlags), OutputKindSpeficLinkerFlags, __EMPTY_IF_NULL(Project->LibrariesDirectories));
+			if(Project->OutputPath){
+				sprintf(Buffer,"%s/OUT:\"%s/%s%s\"", Buffer, Project->OutputPath, Project->OutputName, OutputExtension);
+			}else{
+				sprintf(Buffer,"%s/OUT:\"%s%s\"", Buffer, Project->OutputName, OutputExtension);
+			}
 		}break;
 		
 		case COMPILER_KIND_CLANG:{
@@ -792,13 +796,13 @@ void CompileProjectAndWait(project* Project, s32* ErrorCodeOutput, u32 Flags){
 		Result = "exited";
 	}
 	
-	printf("Compilation of %s started at %02d:%02d:%02d\n\n", Project->Name, StartTime->tm_hour, StartTime->tm_min, StartTime->tm_sec);
+	printf("\nCompilation of %s started at %02d:%02d:%02d\n\n", Project->Name, StartTime->tm_hour, StartTime->tm_min, StartTime->tm_sec);
 	printf("Compilation command: %s\n\n", CommandLiteral);
 	if(Output){
 		printf("%s\n", Output);
 		free(Output);
 	}
-	printf("Compilation of %s %s at %02d:%02d:%02d after %fms(%fs)\n\n\n", Project->Name, Result, EndTime->tm_hour, EndTime->tm_min, EndTime->tm_sec, TimeInS * 1000, TimeInS);
+	printf("Compilation of %s %s at %02d:%02d:%02d after %fms(%fs)\n\n", Project->Name, Result, EndTime->tm_hour, EndTime->tm_min, EndTime->tm_sec, TimeInS * 1000, TimeInS);
 	
 	free(CommandLiteral);
 	
@@ -842,13 +846,13 @@ void CompileProjectMultiThreaded(void * Data){
 	if(ErrorCode){
 		Result = "exited";
 	}
-	printf("Compilation of %s started at %02d:%02d:%02d\n\n", Project.Name, StartTime->tm_hour, StartTime->tm_min, StartTime->tm_sec);
+	printf("\nCompilation of %s started at %02d:%02d:%02d\n\n", Project.Name, StartTime->tm_hour, StartTime->tm_min, StartTime->tm_sec);
 	printf("Compilation command: %s\n\n", CommandLiteral);
 	if(Output){
 		printf("%s\n", Output);
 		free(Output);
 	}
-	printf("Compilation of %s %s at %02d:%02d:%02d after %fms(%fs)\n\n\n", Project.Name, Result, EndTime->tm_hour, EndTime->tm_min, EndTime->tm_sec, TimeInS * 1000, TimeInS);
+	printf("Compilation of %s %s at %02d:%02d:%02d after %fms(%fs)\n\n", Project.Name, Result, EndTime->tm_hour, EndTime->tm_min, EndTime->tm_sec, TimeInS * 1000, TimeInS);
 	
 	if(MultiThreadedCompilationData->AsyncErrorCode){
 		*MultiThreadedCompilationData->AsyncErrorCode = ErrorCode;
@@ -900,7 +904,12 @@ void WaitForProjectCompilation(project *Project){
 void RunProject(project * Project){
 	if(Project->Compiler.OutputKind == OUTPUT_KIND_EXE){
 		char Cmd[64];
-		sprintf(Cmd ,"cd %s && start %s", Project->OutputPath, Project->OutputName);
+		if(Project->OutputPath){
+			sprintf(Cmd ,"cd %s && start %s", Project->OutputPath, Project->OutputName);
+		}else{
+			sprintf(Cmd ,"start %s", Project->OutputName);
+			
+		}
 		system(Cmd);
 	}
 }
