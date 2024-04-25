@@ -3,4 +3,5 @@ out/
 
 *.exe
 *.obj
+*.ilk
 *.pdb

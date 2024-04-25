@@ -50,19 +50,16 @@ int main(int argc, char *argv[]){
 	
 	if(BuildFlag & BIT(0)){
 		SetupProject(&Engine);
-		CompileProject(&Engine, &EngineErrorCode, COMPILATION_SETTINGS_MULTI_THREADED);
+		CompileProjectAndWait(&Engine, &EngineErrorCode, COMPILATION_SETTINGS_MULTI_THREADED);
 	}
 	
 	if(BuildFlag & BIT(1)){
 		SetupProject(&Game);
 		AddProjectLibs(&Game, "Engine.lib");
 		
-		WaitForProjectCompilation(&Engine);
-		CompileProject(&Game, &GameErrorCode, COMPILATION_SETTINGS_MULTI_THREADED);
+		CompileProjectAndWait(&Game, &GameErrorCode, COMPILATION_SETTINGS_MULTI_THREADED);
 	}
 	
-	WaitForProjectCompilation(&Engine);
-	WaitForProjectCompilation(&Game);
 	if(!EngineErrorCode && ! GameErrorCode && BuildFlag & BIT(1)){
 		RunProject(&Game);
 	}
