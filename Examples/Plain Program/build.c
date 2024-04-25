@@ -1,7 +1,7 @@
 #include "../../makec.h"
 
 int main(void){
-	project Project = NewProject("HelloMakeC", OUTPUT_KIND_EXE, COMPILER_KIND_MSVC);
+	project Project = NewProject("HelloMakeC", OUTPUT_KIND_EXECUTABLE, COMPILER_KIND_MSVC);
 	AddFileToProject(&Project, "main.c");
 	
 	int ErrorCode = 0;

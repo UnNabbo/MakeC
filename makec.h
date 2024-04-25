@@ -229,6 +229,21 @@ typedef double   f64;
 
 #define BIT(x) 1 << x
 
+#define ILINE _f
+
+//#define WIN _WIN32
+
+#if defined(__clang__)
+#define PipeOpen popen	
+#define PipeClose pclose
+#elif defined(__GNUC__) || defined(__GNUG__)
+#define PipeOpen popen	
+#define PipeClose pclose
+#elif defined(_MSC_VER)
+#define PipeOpen _popen	
+#define PipeClose _pclose
+#endif
+
 
 void strcatre(char ** Destination, const char * Source){
 	char * NewStr;
@@ -269,21 +284,21 @@ char * cstralloc(const char * Str){
 	return Ptr;
 }
 
-#ifdef _WIN32
 
-char * ExecCommand(const char * CommandLiteral, int PrintCommand){
+
+s32 ExecCommand(const char * CommandLiteral, char ** CommandOutput, int PrintCommand){
 	if(PrintCommand){
 		printf("%s\n", CommandLiteral);
 	}
-	u32 ErrorCode = 0;
+	s32 ErrorCode = 0;
 	
-	FILE* ConsolePipe = _popen(CommandLiteral, "r");
+	FILE* ConsolePipe = PipeOpen(CommandLiteral, "r");
 	if (!ConsolePipe) {
         printf("Failed to open pipe\n");
     }
 	
 	char OutputBuffer[256];
-	char * OutputString;
+	char * OutputString = 0;
 	ZeroStruct(OutputString);
 	while (fgets(OutputBuffer, sizeof(OutputBuffer), ConsolePipe) != 0) {
 		int IsError = strstr(OutputBuffer, "error") != NULL && strstr(OutputBuffer, "error.") == NULL;
@@ -293,29 +308,31 @@ char * ExecCommand(const char * CommandLiteral, int PrintCommand){
 			strcatre(&OutputString, OutputBuffer);
 		}		
 	}
-	if(ErrorCode){
-		return OutputString;
+	
+	if(CommandOutput){
+		*CommandOutput = OutputString;
 	}
-	_pclose(ConsolePipe);
-	return 0;
+	
+	PipeClose(ConsolePipe);
+	return ErrorCode;
 }
 
 void CreateFolderIfItDoesntExist(char * Path, char * Name){
 	char CmdBuffer[64];
 	sprintf(CmdBuffer, "cd %s && if not exist %s mkdir %s",Path, Name, Name);
-	ExecCommand(CmdBuffer, 0);
+	ExecCommand(CmdBuffer, 0, 0);
 }
 
 void CopyAllFile(const char * Source, const char * Destination){
 	char Buffer[64];
 	sprintf(Buffer, "robocopy \"%s\" \"%s\"", Source, Destination);
-	ExecCommand(Buffer, 0);
+	ExecCommand(Buffer, 0, 0);
 }
 
 void CopyAllMatchingFile(const char * Source, const char * Destination, const char * Wildcard){
 	char Buffer[64];
 	sprintf(Buffer, "xcopy /s/y \"%s/%s\" \"%s\"", Source, Wildcard, Destination);
-	ExecCommand(Buffer, 1);
+	ExecCommand(Buffer, 0, 0);
 }
 
 enum bitfield_index{
@@ -361,7 +378,6 @@ char* StringLoLower(char* s) {
 	return s;
 }
 
-
 u32 SearchFlagsInArgv(int Argc, char** Argv, const char * Flags){
 	u32 BitField = 0;
 	if(Argc > 1){
@@ -373,7 +389,7 @@ u32 SearchFlagsInArgv(int Argc, char** Argv, const char * Flags){
 				strncpy(Buffer, Flags, Offset);
 				Flags += Offset + 1;
 				Offset = 0; Index = 0;
-				for(int i = 2; i < Argc; i++){
+				for(int i = 1; i < Argc; i++){
 					if(!strcmp(StringLoLower(Argv[i]), StringLoLower(Buffer))){
 						BitField |= BIT(CurrentBit);
 					}
@@ -384,7 +400,7 @@ u32 SearchFlagsInArgv(int Argc, char** Argv, const char * Flags){
 			if (Flags[Index] == 0) {
 				memset(Buffer, 0, 64);
 				strcpy(Buffer, Flags);
-				for(int i = 2; i < Argc; i++){
+				for(int i = 1; i < Argc; i++){
 					if(!strcmp(StringLoLower(Argv[i]), StringLoLower(Buffer))){
 						BitField |= BIT(CurrentBit);
 					}
@@ -397,7 +413,7 @@ u32 SearchFlagsInArgv(int Argc, char** Argv, const char * Flags){
 };
 
 u32 SearchFlagInArgv(int Argc, char** Argv, const char * Flag){
-	for(int i = 2; i < Argc; i++){
+	for(int i = 1; i < Argc; i++){
 		if(!strcmp(StringLoLower(Argv[i]), StringLoLower((char*)Flag))){
 			return 1;
 		}
@@ -445,9 +461,6 @@ u32 IsBuildTargetInArgv(int Argc, char** Argv, char * BuildTarget){
 };
 
 
-#else
-
-#endif
 
 enum compiler_kind{
 	COMPILER_KIND_MSVC,
@@ -458,9 +471,9 @@ enum compiler_kind{
 };
 
 enum output_kind{
-	OUTPUT_KIND_EXE,
-	OUTPUT_KIND_DLL,
-	OUTPUT_KIND_LIB,
+	OUTPUT_KIND_EXECUTABLE,
+	OUTPUT_KIND_STATIC_LIBRARY,
+	OUTPUT_KIND_DYNAMIC_LIBRARY,
 };
 
 typedef struct {
@@ -489,7 +502,10 @@ typedef struct{
 	
 	char * Defines;
 	
+	char * ExportSymbols;
+	
 	void * CompilationThread;
+	
 } project;
 
 #define WIN32_LIBS "kernel32.lib user32.lib gdi32.lib winspool.lib winmm.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib PowrProf.lib odbccp32.lib Shcore.lib"
@@ -554,7 +570,7 @@ void SeparateFlag(char ** Buffer,char * String, const char * AdditionalFlag){
 			strcatre(Buffer, AdditionalFlag);
 			strncatre(Buffer, String, Offset);
 			strcatre(Buffer, " ");
-			String += Offset ;
+			String += Offset + 1;
 			Offset = 0;
 			Index = 0;
 		}
@@ -571,20 +587,68 @@ void SetProjectIncludeDirectories(project * Project ,const char * Directory){
 	}
 	
 	Project->IncludeDirectories = cstralloc("");
-	SeparateFlag(&Project->IncludeDirectories, (char *)Directory, "/external:I ");
+	switch(Project->Compiler.Kind){
+		case COMPILER_KIND_MSVC:{
+			SeparateFlag(&Project->IncludeDirectories, (char *)Directory, "/external:I ");
+		}break;
+		
+		case COMPILER_KIND_CLANG:{
+			SeparateFlag(&Project->IncludeDirectories, (char *)Directory, "-I");
+		}break;
+		
+		case COMPILER_KIND_GCC:{
+		}break;
+	}
 }
 
 void AddProjectIncludeDirectories(project * Project,char * Directory){
-	SeparateFlag(&Project->IncludeDirectories, Directory, "/external:I ");
+	switch(Project->Compiler.Kind){
+		case COMPILER_KIND_MSVC:{
+			SeparateFlag(&Project->IncludeDirectories, (char *)Directory, "/external:I ");
+		}break;
+		
+		case COMPILER_KIND_CLANG:{
+			SeparateFlag(&Project->IncludeDirectories, (char *)Directory, "-I");
+		}break;
+		
+		case COMPILER_KIND_GCC:{
+		}break;
+	}	
 }
 
-void SetProjectLibrariesDirectories(project * Project,const char * Directory){
+void SetProjectLibrariesDirectories(project * Project ,const char * Directory){
 	if(Project->LibrariesDirectories){
 		free(Project->LibrariesDirectories);
 	}
 	
 	Project->LibrariesDirectories = cstralloc("");
-	SeparateFlag(&Project->LibrariesDirectories, (char *)Directory, "/LIBPATH:");
+	switch(Project->Compiler.Kind){
+		case COMPILER_KIND_MSVC:{
+			SeparateFlag(&Project->LibrariesDirectories, (char *)Directory, "/LIBPATH:");
+		}break;
+		
+		case COMPILER_KIND_CLANG:{
+			SeparateFlag(&Project->LibrariesDirectories, (char *)Directory, "-L");
+		}break;
+		
+		case COMPILER_KIND_GCC:{
+		}break;
+	}	
+}
+
+void AddProjectLibrariesDirectories(project * Project, char * Directory){
+	switch(Project->Compiler.Kind){
+		case COMPILER_KIND_MSVC:{
+			SeparateFlag(&Project->LibrariesDirectories, (char *)Directory, "/LIBPATH:");
+		}break;
+		
+		case COMPILER_KIND_CLANG:{
+			SeparateFlag(&Project->LibrariesDirectories, (char *)Directory, "-L");
+		}break;
+		
+		case COMPILER_KIND_GCC:{
+		}break;
+	}	
 }
 
 void SetProjectDefines(project * Project,const char * Defines){
@@ -593,15 +657,48 @@ void SetProjectDefines(project * Project,const char * Defines){
 	}
 	
 	Project->Defines = cstralloc("");
-	SeparateFlag(&Project->Defines, (char *)Defines, "/D");
+	SeparateFlag(&Project->Defines, (char *)Defines, "-D");
 }
 
 void AddProjectDefines(project * Project,const char * Defines){
-	SeparateFlag(&Project->Defines, (char *)Defines, "/D");
+	SeparateFlag(&Project->Defines, (char *)Defines, "-D");
 }
 
-void AddProjectLibrariesDirectories(project * Project, char * Directory){
-	SeparateFlag(&Project->LibrariesDirectories, Directory, "/LIBPATH:");
+void SetProjectExportSymbol(project * Project,const char * Symbol){
+	if(Project->Compiler.OutputKind = OUTPUT_KIND_DYNAMIC_LIBRARY){
+		if(Project->ExportSymbols){
+			free(Project->ExportSymbols);
+		}
+			
+		Project->ExportSymbols = cstralloc("");
+		switch(Project->Compiler.Kind){
+			case COMPILER_KIND_MSVC:{
+				SeparateFlag(&Project->ExportSymbols, (char *)Symbol, "/EXPORT:");
+			}break;
+			
+			case COMPILER_KIND_CLANG:{
+			}break;
+			
+			case COMPILER_KIND_GCC:{
+			}break;
+		}		
+	}
+}
+
+void AddProjectExportSymbol(project * Project,const char * Symbol){
+	if(Project->Compiler.OutputKind = OUTPUT_KIND_DYNAMIC_LIBRARY){
+		switch(Project->Compiler.Kind){
+			case COMPILER_KIND_MSVC:{
+				SeparateFlag(&Project->ExportSymbols, (char *)Symbol, "/EXPORT:");
+			}break;
+			
+			case COMPILER_KIND_CLANG:{
+			}break;
+			
+			case COMPILER_KIND_GCC:{
+			}break;
+		}	
+	}
 }
 
 void SetProjectLibs(project * Project,const char * Libraries){
@@ -609,13 +706,36 @@ void SetProjectLibs(project * Project,const char * Libraries){
 		free(Project->Libraries);
 	}
 	Project->Libraries = cstralloc("");
-	strcatre(&Project->Libraries, Libraries);
-	strcatre(&Project->Libraries, " ");
+	switch(Project->Compiler.Kind){
+		case COMPILER_KIND_MSVC:{
+			strcatre(&Project->Libraries, Libraries);
+			strcatre(&Project->Libraries, " ");
+		}break;
+		
+		case COMPILER_KIND_CLANG:{
+			SeparateFlag(&Project->Libraries, (char *)Libraries, "-l");
+		}break;
+		
+		case COMPILER_KIND_GCC:{
+		}break;
+	}
+
 }
 
 void AddProjectLibs(project * Project,const char * Libraries){
-	strcatre(&Project->Libraries, Libraries);
-	strcatre(&Project->Libraries, " ");
+	switch(Project->Compiler.Kind){
+		case COMPILER_KIND_MSVC:{
+			strcatre(&Project->Libraries, Libraries);
+			strcatre(&Project->Libraries, " ");
+		}break;
+		
+		case COMPILER_KIND_CLANG:{
+			SeparateFlag(&Project->Libraries, (char *)Libraries, "-l");
+		}break;
+		
+		case COMPILER_KIND_GCC:{
+		}break;
+	}
 }
 
 void SetProjectCompilationFlags(project * Project,const char * Flags){
@@ -672,7 +792,7 @@ void AddFilesToProject(project* Project, const char * PathAndExtension){
 	if(Project->Path){
 		strcatre(&Path, Project->Path);
 		strcatre(&Path, "/");
-		char * PAE = PathAndExtension;
+		char * PAE = (char*)PathAndExtension;
 		for(int i = 0;;i++){
 			if(PAE[i] == '*'){
 				strncatre(&File, PathAndExtension, i);
@@ -706,110 +826,232 @@ void AddFilesToProject(project* Project, const char * PathAndExtension){
 
 char * LibAssembleCommandFromProjectData(project * Project){
 	char Buffer[2048];
-	const char * ObjOutput = (Project->OutputPath) ? Project->OutputPath : ".";
-	sprintf(Buffer, "lib %s%s", __EMPTY_IF_NULL(Project->Compiler.LinkerFlags), __EMPTY_IF_NULL(Project->LibrariesDirectories));
-	
-	if(Project->OutputPath){
-		sprintf(Buffer,"%s/OUT:\"%s/%s.lib\"", Buffer, Project->OutputPath, Project->OutputName);
-	}else{
-		sprintf(Buffer,"%s/OUT:\"%s.lib\"", Buffer, Project->OutputName);
-	}
-	
-	sprintf(Buffer,"%s/%s.obj", Buffer, Project->OutputName);
-	
-	return cstralloc(Buffer);
-}
-
-char * CompilationCommandFromProjectData(project * Project){
-	
-	const char * OutputKindSpeficCompilerFlags;
-	const char * OutputKindSpeficLinkerFlags;
-	const char * OutputExtension;
-	
-	char Buffer[2048];
 	switch(Project->Compiler.Kind){
 		case COMPILER_KIND_MSVC:{
-			if(Project->Compiler.OutputKind != OUTPUT_KIND_LIB){
-				switch(Project->Compiler.OutputKind){
-					case OUTPUT_KIND_EXE:{
-						OutputKindSpeficCompilerFlags= "/MD ";
-						OutputKindSpeficLinkerFlags=  "";
-						OutputExtension = ".exe";
-					}break;
-																															
-					case OUTPUT_KIND_DLL:{
-						OutputKindSpeficCompilerFlags= "/LD ";
-						OutputKindSpeficLinkerFlags=  "/OPT:REF ";
-						OutputExtension = ".dll";
-					}break;
+			const char * ObjOutput = (Project->OutputPath) ? Project->OutputPath : ".";
+			sprintf(Buffer, "lib %s%s", __EMPTY_IF_NULL(Project->Compiler.LinkerFlags), __EMPTY_IF_NULL(Project->LibrariesDirectories));
 							
-				}
-																							
-				char * ObjOutput = cstralloc((Project->OutputPath) ? Project->OutputPath : ".");
-				strcatre(&ObjOutput, "/");
-				strcatre(&ObjOutput, Project->OutputName);
-				sprintf(Buffer, "cl /nologo /FC /Fo:\"%s\" %s%s%s%s%s%s/link %s%s%s", ObjOutput, __EMPTY_IF_NULL(Project->Compiler.CompilationFlags), __EMPTY_IF_NULL(Project->Defines), OutputKindSpeficCompilerFlags, __EMPTY_IF_NULL(Project->Files), __EMPTY_IF_NULL(Project->IncludeDirectories), __EMPTY_IF_NULL(Project->Libraries), __EMPTY_IF_NULL(Project->Compiler.LinkerFlags), OutputKindSpeficLinkerFlags, __EMPTY_IF_NULL(Project->LibrariesDirectories));
-				if(Project->OutputPath){
-					sprintf(Buffer,"%s/OUT:\"%s/%s%s\"", Buffer, Project->OutputPath, Project->OutputName, OutputExtension);
-				}else{
-					sprintf(Buffer,"%s/OUT:\"%s%s\"", Buffer, Project->OutputName, OutputExtension);
-				}
-				free(ObjOutput);
+			if(Project->OutputPath){
+				sprintf(Buffer,"%s/OUT:\"%s/%s.lib\"", Buffer, Project->OutputPath, Project->OutputName);
 			}else{
-				char * ObjOutput = cstralloc((Project->OutputPath) ? Project->OutputPath : ".");
-				strcatre(&ObjOutput, "/");
-				strcatre(&ObjOutput, Project->OutputName);
-				sprintf(Buffer, "cl /c /nologo /FC /MD /Fo:\"%s\" %s%s%s%s", ObjOutput, __EMPTY_IF_NULL(Project->Compiler.CompilationFlags), __EMPTY_IF_NULL(Project->Defines), __EMPTY_IF_NULL(Project->Files), __EMPTY_IF_NULL(Project->IncludeDirectories));
-				free(ObjOutput);
+				sprintf(Buffer,"%s/OUT:\"%s.lib\"", Buffer, Project->OutputName);
 			}
 		}break;
 		
 		case COMPILER_KIND_CLANG:{
+			
+			if(Project->OutputPath){
+				sprintf(Buffer,"ar r \"%s/%s.lib\" \"%s/%s.o\" > NUL", Project->OutputPath, Project->OutputName, Project->OutputPath, Project->OutputName);
+			}else{
+				sprintf(Buffer,"ar r \"%s.lib\" \"%s.o\" > NUL", Project->OutputName, Project->OutputName);
+			}
+			
+	
+
 		}break;
 		
 		case COMPILER_KIND_GCC:{
 		}break;
-	}
+	}	
 	
-	return cstralloc(Buffer);		
+	return cstralloc(Buffer);
 }
 
-enum internal_compilation_flags{
-	COMPILATION_SETTINGS_NONE,
-	COMPILATION_SETTINGS_MULTI_THREADED,
+
+char * CompilationCommandFromProjectDataMSVC(project * Project){	
+	char Buffer[2048];
+	if(Project->Compiler.OutputKind != OUTPUT_KIND_STATIC_LIBRARY){
+		const char * OutputKindSpeficCompilerFlags = "";
+		const char * OutputKindSpeficLinkerFlags = "";
+		const char * OutputExtension = "";
+		
+		switch(Project->Compiler.OutputKind){
+			case OUTPUT_KIND_EXECUTABLE:{
+				OutputExtension = ".exe";
+			}break;
+			
+			case OUTPUT_KIND_DYNAMIC_LIBRARY:{
+				OutputKindSpeficCompilerFlags= "/LD";
+				OutputKindSpeficLinkerFlags=  "/OPT:REF ";
+				OutputExtension = ".dll";
+			}break;
+			
+		}
+		
+		char * ObjOutput = cstralloc((Project->OutputPath) ? Project->OutputPath : ".");
+		strcatre(&ObjOutput, "/");
+		strcatre(&ObjOutput, Project->OutputName);
+		
+		sprintf(Buffer, "cl /nologo /FC /Fo:\"%s\" %s%s%s%s%s%s/link /INCREMENTAL:NO %s%s%s", ObjOutput, __EMPTY_IF_NULL(Project->Compiler.CompilationFlags), __EMPTY_IF_NULL(Project->Defines), OutputKindSpeficCompilerFlags, __EMPTY_IF_NULL(Project->Files), __EMPTY_IF_NULL(Project->IncludeDirectories), __EMPTY_IF_NULL(Project->Libraries), __EMPTY_IF_NULL(Project->Compiler.LinkerFlags), OutputKindSpeficLinkerFlags, __EMPTY_IF_NULL(Project->LibrariesDirectories));
+		
+		if(Project->OutputPath){
+			sprintf(Buffer,"%s/OUT:\"%s/%s%s\"", Buffer, Project->OutputPath, Project->OutputName, OutputExtension);
+		}else{
+			sprintf(Buffer,"%s/OUT:\"%s%s\"", Buffer, Project->OutputName, OutputExtension);
+		}
+		free(ObjOutput);
+	}else{
+		char * ObjOutput = cstralloc((Project->OutputPath) ? Project->OutputPath : ".");
+		strcatre(&ObjOutput, "/");
+		strcatre(&ObjOutput, Project->OutputName);
+		sprintf(Buffer, "cl /c /nologo /FC /MD /Fo:\"%s\" %s%s%s%s", ObjOutput, __EMPTY_IF_NULL(Project->Compiler.CompilationFlags), __EMPTY_IF_NULL(Project->Defines), __EMPTY_IF_NULL(Project->Files), __EMPTY_IF_NULL(Project->IncludeDirectories));
+		free(ObjOutput);
+	}
 	
+	return cstralloc(Buffer);
+}
+
+
+char * CompilationCommandFromProjectDataCLANG(project * Project){	
+	char Buffer[2048];
+	const char * OutputKindSpeficCompilerFlags = "";
+	const char * OutputKindSpeficLinkerFlags = "";
+	const char * OutputExtension = "";
+			
+	switch(Project->Compiler.OutputKind){
+		case OUTPUT_KIND_EXECUTABLE:{
+			OutputExtension = ".exe";
+		}break;
+					
+		case OUTPUT_KIND_DYNAMIC_LIBRARY:{
+			OutputKindSpeficCompilerFlags= "-shared ";
+			OutputKindSpeficLinkerFlags=  "";
+			OutputExtension = ".dll";
+		}break;
+					
+		case OUTPUT_KIND_STATIC_LIBRARY:{
+			OutputKindSpeficCompilerFlags= "-c ";
+			OutputKindSpeficLinkerFlags=  "";
+			OutputExtension = ".o";
+		}break;
+					
+	}
+			
+	char * ObjOutput = cstralloc((Project->OutputPath) ? Project->OutputPath : ".");
+	strcatre(&ObjOutput, "/");
+	strcatre(&ObjOutput, Project->OutputName);
+													
+	sprintf(Buffer, "clang -Qunused-arguments %s%s%s%s%s%s%s%s%s", __EMPTY_IF_NULL(Project->Compiler.CompilationFlags), OutputKindSpeficCompilerFlags, __EMPTY_IF_NULL(Project->Defines), __EMPTY_IF_NULL(Project->Files), __EMPTY_IF_NULL(Project->IncludeDirectories), __EMPTY_IF_NULL(Project->Compiler.LinkerFlags), OutputKindSpeficLinkerFlags, __EMPTY_IF_NULL(Project->LibrariesDirectories), __EMPTY_IF_NULL(Project->Libraries));
+													
+	if(Project->OutputPath){
+		sprintf(Buffer,"%s-o \"%s/%s%s\"", Buffer, Project->OutputPath, Project->OutputName, OutputExtension);
+	}else{
+		sprintf(Buffer,"%s-o \"%s%s\"", Buffer, Project->OutputName, OutputExtension);
+	}
+	free(ObjOutput);
+	
+	return cstralloc(Buffer);
+}
+	
+	char * CompilationCommandFromProjectData(project * Project){
+	switch(Project->Compiler.Kind){
+		case COMPILER_KIND_MSVC:{
+			return CompilationCommandFromProjectDataMSVC(Project);
+		}break;
+							
+		case COMPILER_KIND_CLANG:{
+			return CompilationCommandFromProjectDataCLANG(Project);
+		}break;
+							
+		case COMPILER_KIND_GCC:{
+		}break;
+	}
+			
+	return 0;		
+	}
+	
+	enum internal_compilation_flags{
+	COMPILATION_SETTINGS_NONE = 0,
+	COMPILATION_SETTINGS_DEBUG = BIT(0),
+	COMPILATION_SETTINGS_OPTIMIZED = BIT(1),
+	COMPILATION_SETTINGS_VERY_OPTIMIZED = BIT(2),
+	COMPILATION_SETTINGS_MULTI_THREADED = BIT(3),
+			
 	COMPILATION_SETTINGS_COUNT,
-};
-
-
-static s64 GetQueryPerfonceFreq(){
+	};
+	
+	
+	static s64 GetQueryPerfonceFreq(){
 	s64 freq;
 	QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
 	return freq;
-}
-
-static s64 GetQueryPerformanceCounter() {
+	}
+	
+	static s64 GetQueryPerformanceCounter() {
 	s64 value;
 	QueryPerformanceCounter((LARGE_INTEGER*)&value);
 	return value;
-}
-
-void _CompileProjectInternal(project* Project, s32* ErrorCodeOutput, u32 Flags){
-	char * CommandLiteral = CompilationCommandFromProjectData(Project);
+	}
 	
+	char * FormatCompilationSettingsString(u32 Flags){
+	char * String = 0;
+			
+	int OpenBrackets = 0;
+			
+	if(Flags){
+		strcatre(&String, "with flags: {");
+		OpenBrackets = 1;
+	}
+			
+	if(Flags & COMPILATION_SETTINGS_MULTI_THREADED){
+		strcatre(&String, "Multi threaded");
+		Flags ^= COMPILATION_SETTINGS_MULTI_THREADED;
+		if(Flags){
+			strcatre(&String, ", ");
+		}
+	}
+			
+	if(Flags & COMPILATION_SETTINGS_DEBUG){
+		strcatre(&String, "Debug");
+		Flags ^= COMPILATION_SETTINGS_DEBUG;
+		if(Flags){
+			strcatre(&String, ", ");
+		}
+	}
+			
+	if(Flags & COMPILATION_SETTINGS_OPTIMIZED){
+		strcatre(&String, "Optimized");
+		Flags ^= COMPILATION_SETTINGS_OPTIMIZED;
+		if(Flags){
+			strcatre(&String, ", ");
+		}
+	}
+			
+	if(Flags & COMPILATION_SETTINGS_VERY_OPTIMIZED){
+		strcatre(&String, "Very optimized");
+		Flags ^= COMPILATION_SETTINGS_VERY_OPTIMIZED;
+		if(Flags){
+			strcatre(&String, ", ");
+		}
+	}
+			
+	if(OpenBrackets){
+		strcatre(&String, "} ");
+	}
+			
+	return String;
+	}
+	
+	void _CompileProjectInternal(project* Project, s32* ErrorCodeOutput, u32 Flags){
+	char * CommandLiteral = CompilationCommandFromProjectData(Project);
+	char * LibCommandLiteral = 0;
 	time_t RawTimeStart;
 	time_t RawTimeEnd;
-	
+			
 	time(&RawTimeStart);
 	struct tm* StartTime = localtime(&RawTimeStart);
 	s64 Time = GetQueryPerformanceCounter();
-	char * Output = ExecCommand(CommandLiteral, 0);
-	if(Project->Compiler.OutputKind == OUTPUT_KIND_LIB){
-		char * LibCommandLiteral = LibAssembleCommandFromProjectData(Project);
-		char * LibOutput = ExecCommand(LibCommandLiteral, 0);
+			
+	char * Output = 0;
+	s32 ErrorCode = ExecCommand(CommandLiteral, &Output, 0);
+			
+	char * LibOutput = 0;
+	if(Project->Compiler.OutputKind == OUTPUT_KIND_STATIC_LIBRARY){
+		LibCommandLiteral = LibAssembleCommandFromProjectData(Project);
+		ExecCommand(LibCommandLiteral, &LibOutput, 0);
 		free(LibCommandLiteral);
 	}
-	s32 ErrorCode = (Output) ? 1 : 0;
+	
 	Time = GetQueryPerformanceCounter() - Time;
 	time(&RawTimeEnd);
 	
@@ -822,11 +1064,20 @@ void _CompileProjectInternal(project* Project, s32* ErrorCodeOutput, u32 Flags){
 		Result = "exited";
 	}
 	
-	printf("\nCompilation of %s started at %02d:%02d:%02d\n\n", Project->Name, StartTime->tm_hour, StartTime->tm_min, StartTime->tm_sec);
+	char * CompilationSettingsString = FormatCompilationSettingsString(Flags);
+	printf("\nCompilation of %s %sstarted at %02d:%02d:%02d\n\n", Project->Name, __EMPTY_IF_NULL(CompilationSettingsString), StartTime->tm_hour, StartTime->tm_min, StartTime->tm_sec);
+	free(CompilationSettingsString);
 	printf("Compilation command: %s\n\n", CommandLiteral);
 	if(Output){
 		printf("%s\n", Output);
 		free(Output);
+	}
+	if(LibCommandLiteral){
+		printf("Library build command: %s\n\n", LibCommandLiteral);
+		if(LibOutput){
+			printf("%s\n", LibOutput);
+			free(Output);
+		}
 	}
 	printf("Compilation of %s %s at %02d:%02d:%02d after %fms(%fs)\n\n", Project->Name, Result, EndTime->tm_hour, EndTime->tm_min, EndTime->tm_sec, TimeInS * 1000, TimeInS);
 	
@@ -836,22 +1087,74 @@ void _CompileProjectInternal(project* Project, s32* ErrorCodeOutput, u32 Flags){
 		*ErrorCodeOutput = ErrorCode;
 	}
 }
- 
-void CompileProjectAndWait(project* Project, s32* ErrorCodeOutput, u32 Flags){
+
+void ApplyCompilationSettingsMSVC(project * Project, u32 Flags){
 	if(Flags & COMPILATION_SETTINGS_MULTI_THREADED){
-		switch(Project->Compiler.Kind){
-			case COMPILER_KIND_MSVC:{
-				AddProjectCompilationFlags(Project, "/cgthreads8");
-			}break;
-			
-			case COMPILER_KIND_CLANG:{
-			}break;
-			
-			case COMPILER_KIND_GCC:{
-			}break;
-		}
+		AddProjectCompilationFlags(Project, "/cgthreads8");
 	}
 	
+	if(Flags & COMPILATION_SETTINGS_DEBUG){
+		AddProjectCompilationFlags(Project, "/Zi");
+		AddProjectDefines(Project, "DEBUG");
+	}
+	
+	if(Flags & COMPILATION_SETTINGS_OPTIMIZED){
+		AddProjectCompilationFlags(Project, "/O2");
+		AddProjectDefines(Project, "RELEASE OPTIMIZED");
+	}
+	
+	if(Flags & COMPILATION_SETTINGS_VERY_OPTIMIZED){
+		AddProjectCompilationFlags(Project, "/O2 /GL");
+		AddProjectDefines(Project, "RELEASE VERY_OPTIMIZED");
+	}
+}
+
+void ApplyCompilationSettingsCLANG(project * Project, u32 Flags){
+	if(Flags & COMPILATION_SETTINGS_MULTI_THREADED){
+		
+	}
+			
+	if(Flags & COMPILATION_SETTINGS_DEBUG){
+		AddProjectCompilationFlags(Project, "-g -O0");
+		AddProjectDefines(Project, "DEBUG");
+	}
+			
+	if(Flags & COMPILATION_SETTINGS_OPTIMIZED){
+		AddProjectCompilationFlags(Project, "-O2");
+		AddProjectDefines(Project, "RELEASE OPTIMIZED");
+	}
+			
+	if(Flags & COMPILATION_SETTINGS_VERY_OPTIMIZED){
+		AddProjectCompilationFlags(Project, "-O3");
+		AddProjectDefines(Project, "RELEASE VERY_OPTIMIZED");
+	}
+}
+
+void ApplyCompilationSettingsGCC(project * Project, u32 Flags){
+	if(Flags & COMPILATION_SETTINGS_MULTI_THREADED){
+		
+	}
+}
+
+void ApplyCompilationSettings(project * Project, u32 Flags){
+	switch(Project->Compiler.Kind){
+		case COMPILER_KIND_MSVC:{
+			ApplyCompilationSettingsMSVC(Project, Flags);			
+		}break;
+		
+		case COMPILER_KIND_CLANG:{
+			ApplyCompilationSettingsCLANG(Project, Flags);			
+		}break;
+			
+		case COMPILER_KIND_GCC:{
+			ApplyCompilationSettingsGCC(Project, Flags);						
+		}break;
+	}
+}
+
+void CompileProjectAndWait(project* Project, s32* ErrorCodeOutput, u32 Flags){
+	ApplyCompilationSettings(Project, Flags);
+			
 	_CompileProjectInternal(Project, ErrorCodeOutput, Flags);
 }
 
@@ -862,29 +1165,16 @@ typedef struct{
 }multi_threaded_compilation_data;
 
 void CompileProjectMultiThreaded(void * Data){
+		
 	multi_threaded_compilation_data* MultiThreadedCompilationData = (multi_threaded_compilation_data*)Data;
-	
 	_CompileProjectInternal(MultiThreadedCompilationData->Project, MultiThreadedCompilationData->AsyncErrorCode, MultiThreadedCompilationData->Flags);
-	
 	free(Data);
+	
 	ExitThread(0);
 }
 
-
 s32 CompileProject(project* Project, int * ErrorCode, u32 Flags){
-	if(Flags & COMPILATION_SETTINGS_MULTI_THREADED){
-		switch(Project->Compiler.Kind){
-			case COMPILER_KIND_MSVC:{
-				AddProjectCompilationFlags(Project, "/cgthreads8");
-			}break;
-			
-			case COMPILER_KIND_CLANG:{
-			}break;
-			
-			case COMPILER_KIND_GCC:{
-			}break;
-		}
-	}
+	ApplyCompilationSettings(Project, Flags);
 	
 	multi_threaded_compilation_data* Data = (multi_threaded_compilation_data*)calloc(1, sizeof(multi_threaded_compilation_data));
 	Data->Project = Project; Data->AsyncErrorCode = ErrorCode; Data->Flags = Flags;
@@ -910,7 +1200,7 @@ void WaitForProjectCompilation(project *Project){
 }
 
 void RunProject(project * Project){
-	if(Project->Compiler.OutputKind == OUTPUT_KIND_EXE){
+	if(Project->Compiler.OutputKind == OUTPUT_KIND_EXECUTABLE){
 		char Cmd[64];
 		if(Project->OutputPath){
 			sprintf(Cmd ,"cd %s && start %s", Project->OutputPath, Project->OutputName);
