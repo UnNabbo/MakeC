@@ -60,9 +60,5 @@ int main(int argc, char *argv[]){
 		CompileProjectAndWait(&Game, &GameErrorCode, COMPILATION_SETTINGS_MULTI_THREADED);
 	}
 	
-	if(!EngineErrorCode && ! GameErrorCode && BuildFlag & BIT(1)){
-		RunProject(&Game);
-	}
-	
 	return 0;							
 }
