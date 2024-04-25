@@ -715,7 +715,7 @@ char * LibAssembleCommandFromProjectData(project * Project){
 		sprintf(Buffer,"%s/OUT:\"%s.lib\"", Buffer, Project->OutputName);
 	}
 	
-	sprintf(Buffer,"%s %s.obj", Buffer, Project->OutputName);
+	sprintf(Buffer,"%s/%s.obj", Buffer, Project->OutputName);
 	
 	return cstralloc(Buffer);
 }
@@ -754,11 +754,13 @@ char * CompilationCommandFromProjectData(project * Project){
 				}else{
 					sprintf(Buffer,"%s/OUT:\"%s%s\"", Buffer, Project->OutputName, OutputExtension);
 				}
+				free(ObjOutput);
 			}else{
 				char * ObjOutput = cstralloc((Project->OutputPath) ? Project->OutputPath : ".");
 				strcatre(&ObjOutput, "/");
 				strcatre(&ObjOutput, Project->OutputName);
 				sprintf(Buffer, "cl /c /nologo /FC /MD /Fo:\"%s\" %s%s%s%s", ObjOutput, __EMPTY_IF_NULL(Project->Compiler.CompilationFlags), __EMPTY_IF_NULL(Project->Defines), __EMPTY_IF_NULL(Project->Files), __EMPTY_IF_NULL(Project->IncludeDirectories));
+				free(ObjOutput);
 			}
 		}break;
 		
