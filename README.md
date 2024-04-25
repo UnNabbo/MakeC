@@ -14,7 +14,9 @@ int ErrorCode = 0;
 CompileProjectAndWait(&Project, &ErrorCode,  COMPILATION_SETTINGS_NONE);					
 ```
 MakeC would translate this code to the following compilation command
+
 ``
 cl /nologo /FC /Fo:"./" /MD main.c /link /OUT:"HelloMakeC.exe"
 ``
+
 More examples are available in the repository.
