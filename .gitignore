@@ -1,13 +1,6 @@
 .vs/
 out/
-build/
-project.4coder
-*.cache
+
 *.exe
 *.obj
 *.pdb
-*.evoa
-
-output_performance.json
-build.bat
-MakeBuild.bat

@@ -1,0 +1,75 @@
+version(1);
+
+project_name = "MakeC";
+
+patterns = {
+	"*.c",
+	"*.cpp",
+	"*.ds",
+	"*.h",
+	"*.bat",
+	"*.sh",
+	"*.glsl",
+	"*.4coder",
+};
+
+blacklist_patterns = {
+	".*",
+	"third_party/*",
+	"exported_functions.h",
+};
+
+load_paths = {
+	{
+		{ {"."}, .recursive = true, .relative = true }, .os = "win"
+	},
+};
+
+command_list = {
+	{
+		.name = "build debug",
+		.out = "*compilation*",
+		.footer_panel = true,
+		.save_dirty_files = true,
+		.cursor_at_end = false,
+		.cmd = {
+			{ "build.exe", .os = "win" },
+		},
+	},
+	
+	{
+		.name = "build release",
+		.out = "*compilation*",
+		.footer_panel = true,
+		.save_dirty_files = true,
+		.cursor_at_end = false,
+		.cmd = {
+			{ "build.exe RELEASE", .os = "win" },
+		},
+	},
+	
+	{
+		.name = "build build sytem",
+		.out = "*compilation*",
+		.footer_panel = true,
+		.save_dirty_files = true,
+		.cursor_at_end = false,
+		.cmd = {
+			{ "MakeBuild.bat", .os = "win" },
+		},
+	},
+	
+	{
+		.name = "vcvarsall",
+		.out = "*compilation*",
+		.footer_panel = true,
+		.save_dirty_files = true,
+		.cursor_at_end = false,
+		.cmd = {
+			{ "devshell.bat", .os = "win" },
+		},
+	},
+	
+	
+};
+
