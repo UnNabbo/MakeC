@@ -317,13 +317,6 @@ INLINE void StringFree(string * String){
 	String->Size = 0;
 }
 
-void Print(string String){
-	for(int i = 0; i < String.Size; i++){
-		putchar(String.Base[i]);
-	}
-	putchar('\n');
-}
-
 typedef struct{
 	string * Base;
 	s32 Reserved;
@@ -373,6 +366,21 @@ static void StringListFree(string_list* List) {
 
 static string  StringListAt(string_list * List, s32 Index){
 	return List->Base[Index];
+}
+
+static char * StringListAtCSTR(string_list * List, s32 Index){
+	return List->Base[Index].Base;
+}
+
+static b32 StringCompare(string Str1, string Str2){
+	if(Str1.Size != Str2.Size){
+		return false;	
+	}
+	for(int i = 0; i < Str1.Size; i++){
+		if(Str1.Base[i] != Str2.Base[i]){
+			return false;
+		}
+	}
 }
 
 static string * StringListAppend(string_list * List, string Data) {
@@ -499,6 +507,72 @@ static string StringFormat(string Format, ...){
 	return Formatted;
 }
 
+static void StringPrintsl(string Text){
+	for(int i = 0; i < Text.Size; i++){
+		putchar(Text.Base[i]);
+	}
+}
+
+static void StringPrint(string Text){
+	for(int i = 0; i < Text.Size; i++){
+		putchar(Text.Base[i]);
+	}
+	putchar('\n');
+}
+
+static void StringPrintf(string Format, ...){
+	va_list arg;
+	
+	string_list List;	
+	ZeroMemory(List);
+	
+	s32 Size = Format.Size;
+	
+	va_start (arg, &Format);
+	
+	for(int i = 0; i < Format.Size; i++){
+		if(Format.Base[i] == '%'){
+			if(i){
+				if(Format.Base[i] == '#'){
+					continue;
+				}
+			}
+			string * String = StringListAppend(&List, va_arg(arg, string));
+			Size += String->Size - 1;
+		}
+	}
+	va_end (arg);
+	
+	string Formatted = StringAllocWithSize(Size);
+	s32 Offset = 0;
+	s32 OffsetDelta = 0;
+	u32 ListIndex = 0;
+	for(int i = 0; i < Format.Size; i++){
+		if(Format.Base[i] == '%'){
+			if(i){
+				if(Format.Base[i - 1] == '\\'){
+					continue;
+				}
+			}
+			
+			string String = StringListAt(&List, ListIndex++);
+			MemCopy(Formatted.Base + Offset + OffsetDelta, Format.Base + Offset, i - Offset);
+			
+			MemCopy(Formatted.Base + Offset + OffsetDelta + i - Offset, String.Base, String.Size);
+			
+			Offset = i + 1;
+			OffsetDelta += String.Size - 1;
+		}
+	}
+	
+	MemCopy(Formatted.Base + Offset + OffsetDelta, Format.Base + Offset, Format.Size - Offset);
+	
+	StringListFree(&List);
+	
+	StringPrint(Formatted);
+	
+	StringFree(&Formatted);
+}
 
 #if defined(__clang__)
 #define PipeOpen popen	
@@ -522,15 +596,15 @@ static s32 ExecuteCommand(char * Command, string * String){
 	s32 ErrorCode = 0;
 
 	while (fgets(PipeBuffer, sizeof(PipeBuffer), Console) != 0) {
-		if (!strstr(PipeBuffer, "error") || !strstr(PipeBuffer, "fatal")) {
+		if (strstr(PipeBuffer, "error") || strstr(PipeBuffer, "fatal")) {
 			ErrorCode = 1;
 		}
-		if (!strstr(PipeBuffer, "Error") || !strstr(PipeBuffer, "Fatal")) {
+		if (strstr(PipeBuffer, "Error") || strstr(PipeBuffer, "Fatal")) {
 			ErrorCode = 1;
 		}
 	}
 	
-	if( String){
+	if(String){
 		* String = StringAlloc(PipeBuffer);
 	}
 	
@@ -559,6 +633,30 @@ static FilesCopyAllMatching(const char * Source, const char * Destination, const
 	StringFree(&Command);
 }
 
+static FileGLOB(string_list * List, const char* Path){
+	s32 InitialSize = List->Size;
+	printf("%s", Path);
+	WIN32_FIND_DATA fd; 
+	HANDLE hFind = FindFirstFile(Path, &fd);
+	int Amount = 0;
+	if(hFind != INVALID_HANDLE_VALUE) { 
+		do { 
+			if(! (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ) {
+				string FileName = StringAlloc(fd.cFileName);
+				b32 ShouldAdd = true;
+				for(int i = 0; i < InitialSize; i++){
+					if(StringCompare(FileName, StringListAt(List, i))){
+						ShouldAdd = false;
+					}
+				}
+				if(ShouldAdd) StringListAppend(List, FileName);
+			}
+			
+		}while(FindNextFile(hFind, &fd)); 
+		FindClose(hFind); 
+	}
+}
+
 static char * EnviromentVariableGet(const char * VarName){
 	char Buff[64];
 	memset(Buff, 0, 64);
@@ -583,13 +681,27 @@ static b32 ProcessIsRunning(const char *ProcessName)
     return exists;
 }
 
-static INLINE s64 GetQueryPerfonceFreq(){
+static string TimeGetCurrent(){
+	time_t RawTimeStart;
+	time_t RawTimeEnd;
+	
+	time(&RawTimeStart);
+	struct tm* StartTime = localtime(&RawTimeStart);
+	char Buffer[128];
+	ZeroMemory(Buffer);
+	sprintf(Buffer, "%02d:%02d:%02d", StartTime->tm_hour, StartTime->tm_min, StartTime->tm_sec);
+	
+	return StringAlloc(Buffer);
+	
+}
+
+static INLINE s64 QueryPerfonceGetFreq(){
 	s64 freq;
 	QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
 	return freq;
 }
 
-static INLINE s64 GetQueryPerformanceCounter() {
+static INLINE s64 QueryPerformanceGetCounter() {
 	s64 value;
 	QueryPerformanceCounter((LARGE_INTEGER*)&value);
 	return value;
@@ -671,7 +783,6 @@ INLINE void ProjectSetOutputType(project * Project, u32 Output){
 }
 
 INLINE void ProjectSetFilePath(project * Project, const char * Path){
-	FolderCreate(Path);
 	Project->FilePath = Path;
 }
 
@@ -680,12 +791,30 @@ INLINE  void ProjectSetOutputPath(project * Project, const char * Path){
 	Project->OutputPath = Path;
 }
 
-INLINE void ProjectAddSourceFiles(project * Project, const char * Files){
-	StringSemanticSplit(&Project->SourceFiles, StringCreate(Files), ' ');
+INLINE void ProjectAddFiles(project * Project, const char * Paths){
+	string_list Files = StringListAlloc(8);
+	StringSemanticSplit(&Files, STR(Paths), ' ');
+	
+	for(int i = 0; i < Files.Size; i++){	
+		string Path = StringListAt(&Files, i);
+		b32 IsAPattern = false;
+		for(int j = 0; j < Path.Size; j++){
+			if(Path.Base[j] == '*'){
+				IsAPattern = true;
+			}
+		}
+		
+		if(!IsAPattern){
+			StringListAppend(&Project->SourceFiles, StringAlloc(Path.Base));
+		}else{
+			FileGLOB(&Project->SourceFiles, Path.Base);		
+		}
+	}
+	StringListFree(&Files);
 }
 
-INLINE void ProjectResetSourceFiles(project * Project){
-	StringListFree(&Project->SourceFiles);
+INLINE void ProjectResetFiles(project * Project){
+	StringListFreeAll(&Project->SourceFiles);
 }
 
 INLINE void ProjectAddCompilerFlags(project * Project, const char * Flags){
@@ -712,8 +841,8 @@ INLINE void ProjectResetLibs(project * Project){
 	StringListFree(&Project->Libs);
 }
 
-INLINE void ProjectAddIncludeDirs(project * Project, const char * Libs){
-	StringSemanticSplit(&Project->IncludeDirs, StringCreate(Libs), ' ');
+INLINE void ProjectAddIncludeDirs(project * Project, const char * Dirs){
+	StringSemanticSplit(&Project->IncludeDirs, StringCreate(Dirs), ' ');
 }
 
 INLINE void ProjectResetIncludeDirs(project * Project){
@@ -734,6 +863,23 @@ INLINE void ProjectExportSymbols(project * Project, const char * Symbols){
 
 INLINE void ProjectResetSymbols(project * Project){
 	StringListFree(&Project->Symbols);
+}
+
+INLINE void ProjectWait(project * Project){
+	if(Project->Thread){
+		WaitForSingleObject(Project->Thread, INFINITE);
+	}
+}
+
+INLINE void ProjectLaunch(project * Project){
+	string Command;
+	if(Project->OutputPath){
+		Command = StringFormat(STR("start %/%"), STR(Project->OutputPath), STR(Project->Name));
+	}else{
+		Command = StringFormat(STR("start %"), STR(Project->Name));
+	}
+	ExecuteCommand(Command.Base, 0);
+	StringFree(&Command);
 }
 
 string MSVCGenerateCompilationCommand(project * Project){
@@ -820,14 +966,89 @@ string MSVCGenerateCompilationCommand(project * Project){
 	return CompilationCommand;
 }
 
+string MSVCGenerateLinkCommand(project * Project){
+	string Libs = StringListJoin(&Project->Libs, ' ');
+	string LinkerFlags = StringListJoin(&Project->LinkerFlags, ' ');
+	
+	string_list RawSymbols = StringListCopy(&Project->Symbols);
+	for(int i = 0; i < RawSymbols.Size; i++){
+		RawSymbols.Base[i] = StringFormat(STR("/EXPORT:%"), RawSymbols.Base[i]);
+	}
+	string Symbols = StringListJoin(&RawSymbols, ' ');
+	StringListFreeAll(&RawSymbols);
+	
+	string_list RawLibsDirs = StringListCopy(&Project->LibsDirs);
+	for(int i = 0; i < RawLibsDirs.Size; i++){
+		RawLibsDirs.Base[i] = StringFormat(STR("/D%"), RawLibsDirs.Base[i]);
+	}
+	string LibsDirs = StringListJoin(&RawLibsDirs, ' ');
+	StringListFreeAll(&RawLibsDirs);
+	
+	string TsPattern = StringFormat(STR("%/%/*.obj"), STR(Project->OutputPath), STR(Project->Name));
+	string_list RawTranslationUnits = StringListAlloc(8);
+	FileGLOB(&RawTranslationUnits, TsPattern.Base);
+	StringFree(&TsPattern);
+	string TranslationUnits = StringListJoin(&RawTranslationUnits, ' ');
+	//StringListFreeAll(&RawTranslationUnits);
+
+	string LinkCommand = StringFormat(STR("lib % % % % % /OUT:\"%/%.lib\""), TranslationUnits, LinkerFlags, LibsDirs, Libs, Symbols, STR(Project->OutputPath),  STR(Project->Name));
+	
+	StringFree(&Libs);
+	StringFree(&LibsDirs);
+	StringFree(&LinkerFlags);
+	StringFree(&Symbols);
+	
+	return LinkCommand;
+}
+
 void Compile(compilation_data Data){
 	project * Project = Data.Project;
 	
-	string CompileCommand = MSVCGenerateCompilationCommand(Project);
+	string Command = MSVCGenerateCompilationCommand(Project);
+	string LinkCommand;
 	
-	Print(CompileCommand);
+	if(Project->Output = OUTPUT_LIBRARY){
+		LinkCommand = MSVCGenerateLinkCommand(Project);
+	}
 	
-	ExecuteCommand(CompileCommand.Base, 0);
+	string Output;
+	string LinkOutput;
+	
+#if !QUIET_MODE	
+	string StartTime = TimeGetCurrent();
+	StringPrintf(STR("Compilation of % started at %"), STR(Project->Name), StartTime);
+	StringFree(&StartTime);
+	
+	u64 Ticks = QueryPerformanceGetCounter();
+#endif
+
+	s32 ErrorCode = ExecuteCommand(Command.Base, &Output);
+	if(Project->Output = OUTPUT_LIBRARY){
+		StringPrintsl(LinkCommand);
+		ErrorCode |= ExecuteCommand(LinkCommand.Base, &LinkOutput);
+	}
+	
+#if !QUIET_MODE
+	Ticks = QueryPerformanceGetCounter() - Ticks;
+	string EndTime = TimeGetCurrent();
+	
+	f64 Seconds = Ticks / QueryPerfonceGetFreq();
+	
+	if(true){
+		StringPrintsl(Output);
+		if(Project->Output = OUTPUT_LIBRARY){
+			StringPrintsl(LinkOutput);
+		}
+	}
+
+	
+	string Result = (ErrorCode) ? STR("exited") : STR("finished");
+	StringPrintf(STR("Compilation of % % at % after ms(s)"), STR(Project->Name), Result, EndTime/*, Seconds * 1000, Seconds*/);
+	StringFree(&EndTime);
+	
+#endif
+	
+	StringFree(&Output);
 	
 	if(Data.MultiThreaded){
 		MemFree(Project);
@@ -844,12 +1065,6 @@ static void ProjectCompile(project * Project, s32 * ErrorCode){
 	Project->Thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Compile, &Data, 0, NULL);
 	if(!Project->Thread){
 		// TODO(Nabbo): Assertion!
-	}
-}
-
-INLINE void ProjectWait(project * Project){
-	if(Project->Thread){
-		WaitForSingleObject(Project->Thread, INFINITE);
 	}
 }
 
