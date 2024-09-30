@@ -1,6 +1,6 @@
 #include "stdio.h"
 
-int hell(void){
+int main(void){
 	printf("Makec is great!");
 	
 	return 0;							

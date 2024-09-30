@@ -1,34 +1,3 @@
-# MakeC
-A simple C/C++ build system written in C that uses C as a project specification language
-
-###  Usage
-Using MakeC is really easy as it comes as a single include header that you can just copy in your project, include it in any C/C++ file, write your project specification in C/C++ and then compile that file with either the makebuild.bat provided in any of the examples or with any modern C/C++ compiler.
-###  Writing a project specification
-As a previusly stated MakeC uses C/C++ as a project specification language so that you do not have to learn an entirely new scripting language just to compile your C/C++ projects.
-A quick example on how MakeC uses C/C++ as a project spefication language follows:
-```cpp
-#define ENTRY_POINT Entry
-#define QUIET_MODE false
-#include "makec"
-
-
-void Entry(){
-project Project = ProjectCreate("HelloMakeC", COMPILER_MSVC, OUTPUT_EXECUTABLE);
-ProjectAddFiles(&Project, "main.c");
-int ErrorCode = ProjectCompileAndWait(&Project);	
-}
-```
-MakeC would translate this code to the following compilation command
-
-``
-cl /nologo /FC /Fo:"./" /MD main.c /link /OUT:"HelloMakeC.exe"
-``
-
-More examples are available in the repository.
-
-## Docs
-
-```cpp
 //Special thanks to  Quattro(https://github.com/QuattroMusic) for most of this documentation.
 
 // ----------------
@@ -280,5 +249,4 @@ static inline void ProjectLaunch(project * Project);
 */
 
 static inline b32 ProjectIsRunning(project * Project);
-// Checks if a given project executable is running, will return false if project output is not OUTPUT_EXECUTABLE				
-```
+// Checks if a given project executable is running, will return false if project output is not OUTPUT_EXECUTABLE

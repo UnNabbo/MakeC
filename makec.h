@@ -219,6 +219,10 @@ limitations under the License.
 #include <stdlib.h>
 #include <time.h>
 
+#ifndef _MSC_VER
+#error Makec currenlty only support msvc compilation
+#endif
+
 // only valid for 64 bit CPUs
 typedef signed char        s8;
 typedef signed short       s16;
@@ -240,10 +244,7 @@ typedef unsigned long long b64;
 #define false 0
 #endif
 
-#ifndef ENTRY_POINT
-#error Entry point specification is required.
-#endif
-
+#undef ZeroMemory
 #define ZeroMemory(var) memset(&var, 0, sizeof(var))
 #define MemAlloc(size) calloc(1, size)
 #define MemRealloc(ptr, size) realloc(ptr, size)
@@ -267,7 +268,7 @@ typedef struct{
 #define STR(str) StringCreate(str)
 #define C_STR(str) str.Base
 
-INLINE s32 CStringLenght(char * String){
+inline s32 CStringLenght(const char * String){
 	int i = 0;
 	while(String[i]){
 		i++;
@@ -275,28 +276,28 @@ INLINE s32 CStringLenght(char * String){
 	return i;
 }
 
-INLINE char * CStringAlloc(char * String){
+inline char * CStringAlloc(char * String){
 	s32 Size = CStringLenght(String);
 	char * NewString = MemAlloc(Size);
 	MemCopy(NewString, String, Size);
 	return NewString;
 }
 
-INLINE string StringCreate(const char * Text){
+inline string StringCreate(const char * Text){
 	string String;
-	String.Size = CStringLenght(Text);
-	String.Base = Text;
+	String.Base = (char *)Text;
+	String.Size = (Text) ? CStringLenght(Text) : 0;
 	return String;
 }
 
-INLINE string StringCreateWithSize(const char * Text, s32 Size){
+inline string StringCreateWithSize(const char * Text, s32 Size){
 	string String;
+	String.Base = (char *)Text;
 	String.Size = Size;
-	String.Base = Text;
 	return String;
 }
 
-INLINE string StringAlloc(char * Text){
+inline string StringAlloc(char * Text){
 	string String;
 	String.Size = CStringLenght(Text);
 	String.Base = MemAlloc(String.Size + 1);
@@ -304,17 +305,92 @@ INLINE string StringAlloc(char * Text){
 	return String;
 }
 
-INLINE string StringAllocWithSize(s32 Size){
+inline string StringAllocSubstr(char * Text, s32 Size){
+	string String;
+	String.Size = Size;
+	String.Base = MemAlloc(String.Size + 1);
+	MemCopy(String.Base, Text, String.Size);
+	return String;
+}
+
+
+inline string StringAllocWithSize(s32 Size){
 	string String;
 	String.Size = Size;
 	String.Base = MemAlloc(String.Size + 1);
 	return String;
 }
 
-
-INLINE void StringFree(string * String){
+inline void StringFree(string * String){
 	MemFree(String->Base);
 	String->Size = 0;
+}
+
+#if 0
+inline string S32ToString(s32 value){
+	char result[16];
+    char* ptr = result, *ptr1 = result, tmp_char;
+    s32 tmp_value;
+	
+    do {
+        tmp_value = value;
+        value /= 10;
+        *ptr++ = "zyxwvutsrqponmlkjihgfedcba9876543210123456789abcdefghijklmnopqrstuvwxyz" [35 + (tmp_value - value * base)];
+    } while ( value );
+	
+    // Apply negative sign
+    if (tmp_value < 0) *ptr++ = '-';
+    *ptr-- = '\0';
+	
+    // Reverse the string
+    while(ptr1 < ptr) {
+        tmp_char = *ptr;
+        *ptr--= *ptr1;
+        *ptr1++ = tmp_char;
+    }
+    return StringAlloc(result);
+}
+#endif
+
+
+inline string F64ToString(f64 Value, s32 Precision){
+	char Buffer[64];
+	char *Ptr = Buffer;
+	char Character;
+	if(Value < 0) {
+		Value = -Value;
+		*Ptr++ = '-';
+	}
+	Value += 0.000005;
+	u64 IntPart = Value;
+	Value -= IntPart;
+	if(!IntPart) {
+		*Ptr++ = '0';
+	} else {
+		char* P = Ptr;
+		while(IntPart) {
+			*P++ = '0' + IntPart % 10;
+			IntPart /= 10;
+		}
+		char* P1 = P;
+		
+		while(P > Ptr) {
+			Character = *--P;
+			*P = *Ptr;
+			*Ptr++ = Character;
+		}
+		Ptr = P1;
+	}
+	*Ptr++ = '.';
+	
+	while(Precision--) {
+		Value *= 10.0;
+		Character = Value;
+		*Ptr++ = '0' + Character;
+		Value -= Character;
+	}
+	
+	return StringAlloc(Buffer);
 }
 
 typedef struct{
@@ -325,34 +401,35 @@ typedef struct{
 
 static string_list StringListAlloc(s32 Size){
 	string_list List;
-	
-	List.Size = 0;
+	ZeroMemory(List);
 	List.Reserved = Size;
-	List.Base = (string *)MemAlloc(sizeof(string) * Size);
-}
-
-static string_list StringListCopy(string_list* OldList){
-	string_list List;
-	
-	List.Size = OldList->Size;
-	List.Reserved = OldList->Reserved;
-	List.Base = (string *)MemAlloc(sizeof(string) * OldList->Reserved);
-	MemCopy(List.Base, OldList->Base, OldList->Reserved);
-	
+	List.Base = (string *)MemAlloc(sizeof(string) * List.Reserved);
 	return List;
 }
 
 static void StringListRealloc(string_list* List, s32 NewSize) {
-	if(!List->Base){
-		List->Base = (string *)MemAlloc(sizeof(string) * NewSize);
-	}else{
-		List->Base = (string *)MemRealloc(List->Base, sizeof(string) * NewSize);
-	}
     List->Reserved = NewSize;
+	if(!List->Base){
+		List->Base = (string *)MemAlloc(sizeof(string) * List->Reserved);
+	}else{
+		List->Base = (string *)MemRealloc(List->Base, sizeof(string) * List->Reserved);
+	}
+}
+
+static string_list StringListCopy(string_list* OldList){
+	string_list List;
+	ZeroMemory(List);
+	
+	List.Reserved = OldList->Reserved;
+	List.Base = (string *)MemAlloc(sizeof(string) * List.Reserved);
+	MemCopy(List.Base, OldList->Base, List.Reserved);
+	List.Size = OldList->Size;
+	
+	return List;
 }
 
 static void StringListFreeAll(string_list* List) {
-	for(int i = 0; List->Size; i++){
+	for(int i = 0; i < List->Size; i++){
 		StringFree(&List->Base[i]);
 	}
 	MemFree(List->Base);
@@ -381,6 +458,7 @@ static b32 StringCompare(string Str1, string Str2){
 			return false;
 		}
 	}
+	return true;
 }
 
 static string * StringListAppend(string_list * List, string Data) {
@@ -456,6 +534,29 @@ static void StringSemanticSplit(string_list* List, string String, char Token){
 		i++;
 	}
 }
+
+static void StringSemanticSplitAlloc(string_list* List, string String, char Token){
+	s32 i = 0, Offset = 0, Quotes = 0;
+	
+	while(true){
+		if(String.Base[i] == '\\' && String.Base[i + 1] == '\"'){
+			Quotes = !Quotes;
+		}
+		
+		if(!String.Base[i] && !Quotes){
+			StringListAppend(List, StringAllocSubstr(String.Base + Offset, i - Offset));
+			break;
+		}
+		
+		if(String.Base[i] == Token && String.Base[i + 1]){
+			StringListAppend(List, StringAllocSubstr(String.Base + Offset, i - Offset));
+			Offset = i + 1;
+		}
+		
+		i++;
+	}
+}
+
 static string StringFormat(string Format, ...){
 	va_list arg;
 	
@@ -464,15 +565,14 @@ static string StringFormat(string Format, ...){
 	
 	s32 Size = Format.Size;
 	
+#ifndef _MSC_VER
+	va_start (arg, Format);
+#else
 	va_start (arg, &Format);
+#endif
 	
 	for(int i = 0; i < Format.Size; i++){
 		if(Format.Base[i] == '%'){
-			if(i){
-				if(Format.Base[i] == '#'){
-					continue;
-				}
-			}
 			string * String = StringListAppend(&List, va_arg(arg, string));
 			Size += String->Size - 1;
 		}
@@ -485,12 +585,6 @@ static string StringFormat(string Format, ...){
 	u32 ListIndex = 0;
 	for(int i = 0; i < Format.Size; i++){
 		if(Format.Base[i] == '%'){
-			if(i){
-				if(Format.Base[i - 1] == '\\'){
-					continue;
-				}
-			}
-			
 			string String = StringListAt(&List, ListIndex++);
 			MemCopy(Formatted.Base + Offset + OffsetDelta, Format.Base + Offset, i - Offset);
 			
@@ -528,15 +622,15 @@ static void StringPrintf(string Format, ...){
 	
 	s32 Size = Format.Size;
 	
+#ifndef _MSC_VER
+	va_start (arg, Format);
+#else
 	va_start (arg, &Format);
+#endif
 	
 	for(int i = 0; i < Format.Size; i++){
 		if(Format.Base[i] == '%'){
-			if(i){
-				if(Format.Base[i] == '#'){
-					continue;
-				}
-			}
+		
 			string * String = StringListAppend(&List, va_arg(arg, string));
 			Size += String->Size - 1;
 		}
@@ -549,12 +643,6 @@ static void StringPrintf(string Format, ...){
 	u32 ListIndex = 0;
 	for(int i = 0; i < Format.Size; i++){
 		if(Format.Base[i] == '%'){
-			if(i){
-				if(Format.Base[i - 1] == '\\'){
-					continue;
-				}
-			}
-			
 			string String = StringListAt(&List, ListIndex++);
 			MemCopy(Formatted.Base + Offset + OffsetDelta, Format.Base + Offset, i - Offset);
 			
@@ -615,34 +703,37 @@ static s32 ExecuteCommand(char * Command, string * String){
 #ifdef _WIN32
 
 
-static FolderCreate(const char * Path){
+static void FolderCreate(const char * Path){
 	string Command = StringFormat(STR(">nul 2>&1 pushd \"%\" &&(popd & >nul 2>&1 mkdir \"%\")|| >nul 2>&1 mkdir \"%\""), STR(Path),  STR(Path),  STR(Path));
 	ExecuteCommand(Command.Base, 0);
 	StringFree(&Command);
 }
 
-static FilesCopyAll(const char * Source, const char * Destination){
-	string Command = StringFormat(STR("robocopy \"%\" \"%\""), Source, Destination);
+static void FilesCopyAll(const char * Source, const char * Destination){
+	string Command = StringFormat(STR("robocopy \"%\" \"%\""), STR(Source), STR(Destination));
 	ExecuteCommand(Command.Base, 0);
 	StringFree(&Command);
 }
 
-static FilesCopyAllMatching(const char * Source, const char * Destination, const char * Pattern){
-	string Command = StringFormat(STR("xcopy /s/y \"%/%\" \"%\""), Source, Pattern, Destination);
+static void FilesCopyAllMatching(const char * Source, const char * Destination, const char * Pattern){
+	string Command = StringFormat(STR("xcopy /s/y \"%\\%\" \"%\""), STR(Source), STR(Pattern), STR(Destination));
 	ExecuteCommand(Command.Base, 0);
 	StringFree(&Command);
 }
 
-static FileGLOB(string_list * List, const char* Path){
+static void FileGLOB(string_list * List, const char* Pattern){
 	s32 InitialSize = List->Size;
-	printf("%s", Path);
 	WIN32_FIND_DATA fd; 
-	HANDLE hFind = FindFirstFile(Path, &fd);
+	HANDLE hFind = FindFirstFile(Pattern, &fd);
+	
+	s32 PathSize = 0;
+	while(Pattern[PathSize] != '*' && Pattern[PathSize++]){}
+	
 	int Amount = 0;
 	if(hFind != INVALID_HANDLE_VALUE) { 
 		do { 
 			if(! (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ) {
-				string FileName = StringAlloc(fd.cFileName);
+				string FileName = (PathSize) ? StringFormat(STR("%/%"),StringCreateWithSize(Pattern, PathSize - 1), STR(fd.cFileName)) : StringAlloc(fd.cFileName);
 				b32 ShouldAdd = true;
 				for(int i = 0; i < InitialSize; i++){
 					if(StringCompare(FileName, StringListAt(List, i))){
@@ -695,13 +786,13 @@ static string TimeGetCurrent(){
 	
 }
 
-static INLINE s64 QueryPerfonceGetFreq(){
+static inline s64 QueryPerfonceGetFreq(){
 	s64 freq;
 	QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
 	return freq;
 }
 
-static INLINE s64 QueryPerformanceGetCounter() {
+static inline s64 QueryPerformanceGetCounter() {
 	s64 value;
 	QueryPerformanceCounter((LARGE_INTEGER*)&value);
 	return value;
@@ -725,7 +816,6 @@ enum output{
 	OUTPUT_EXECUTABLE,
 	OUTPUT_DYNAMIC_LIBRARY,
 	OUTPUT_LIBRARY,
-	//COMPILER_,
 	
 	OUTPUT_COUNT,
 };
@@ -760,6 +850,36 @@ typedef struct {
 	b32 MultiThreaded;
 }compilation_data;
 
+typedef struct{
+	string_list Literals;
+}command_line_args;
+
+static command_line_args Arguments;
+
+static void ArgumentsLoad(s32 Argc, char * Argv[]){
+	for(int i = 1; i < Argc; i++){
+		StringListAppend(&Arguments.Literals, STR(Argv[i]) );
+	}
+}
+
+static s32 ArgumentsSearch(const char * Args){
+	string_list ArgsList;
+	ZeroMemory(ArgsList);
+	StringSplit(&ArgsList, STR(Args), ' ');
+	
+	s32 Result = -1;
+	
+	for(int i = 0; i < Arguments.Literals.Size; i++){
+		for(int j = 0; j < ArgsList.Size; j++){
+			if(StringCompare(Arguments.Literals.Base[i], ArgsList.Base[j])){
+				Result = j;
+			}
+		}
+	}
+	
+	StringListFree(&ArgsList);
+	return Result;
+}
 
 static project ProjectCreate(const char * Name, u32 Compiler, u32 Output){
 	project Project;
@@ -774,25 +894,26 @@ static project ProjectCreate(const char * Name, u32 Compiler, u32 Output){
 	return Project;
 }
 
-INLINE void ProjectSetCompiler(project * Project, u32 Compiler){
+static inline void ProjectSetCompiler(project * Project, u32 Compiler){
 	Project->Compiler = Compiler;
 }
 
-INLINE void ProjectSetOutputType(project * Project, u32 Output){
+static inline void ProjectSetOutputType(project * Project, u32 Output){
 	Project->Output = Output;
 }
 
-INLINE void ProjectSetFilePath(project * Project, const char * Path){
+static inline void ProjectSetFilePath(project * Project, const char * Path){
 	Project->FilePath = Path;
 }
 
-INLINE  void ProjectSetOutputPath(project * Project, const char * Path){
+static inline  void ProjectSetOutputPath(project * Project, const char * Path){
 	FolderCreate(Path);
 	Project->OutputPath = Path;
 }
 
-INLINE void ProjectAddFiles(project * Project, const char * Paths){
-	string_list Files = StringListAlloc(8);
+static inline void ProjectAddFiles(project * Project, const char * Paths){
+	string_list Files;
+	ZeroMemory(Files);
 	StringSemanticSplit(&Files, STR(Paths), ' ');
 	
 	for(int i = 0; i < Files.Size; i++){	
@@ -804,87 +925,121 @@ INLINE void ProjectAddFiles(project * Project, const char * Paths){
 			}
 		}
 		
+		string FullPath;
 		if(!IsAPattern){
-			StringListAppend(&Project->SourceFiles, StringAlloc(Path.Base));
+			FullPath = (Project->FilePath) ? StringFormat(STR("%/%"), STR(Project->FilePath), STR(Path.Base)) : StringAlloc(Path.Base);
+			StringListAppend(&Project->SourceFiles, FullPath);
 		}else{
-			FileGLOB(&Project->SourceFiles, Path.Base);		
+			FullPath = (Project->FilePath) ? StringFormat(STR("%/%"), STR(Project->FilePath), STR(Path.Base)) : StringAlloc(Path.Base);
+			FileGLOB(&Project->SourceFiles, FullPath.Base);		
+			StringFree(&FullPath);
 		}
 	}
 	StringListFree(&Files);
 }
 
-INLINE void ProjectResetFiles(project * Project){
+static inline void ProjectResetFiles(project * Project){
 	StringListFreeAll(&Project->SourceFiles);
 }
 
-INLINE void ProjectAddCompilerFlags(project * Project, const char * Flags){
-	StringSemanticSplit(&Project->CompilerFlags, StringCreate(Flags), ' ');
+static inline void ProjectAddCompilerFlags(project * Project, const char * Flags){
+	StringSemanticSplitAlloc(&Project->CompilerFlags, StringCreate(Flags), ' ');
 }
 
-INLINE void ProjectResetCompilerFlags(project * Project){
-	StringListFree(&Project->CompilerFlags);
+static inline void ProjectResetCompilerFlags(project * Project){
+	StringListFreeAll(&Project->CompilerFlags);
 }
 
-INLINE void ProjectAddLinkerFlags(project * Project, const char * Flags){
-	StringSemanticSplit(&Project->LinkerFlags, StringCreate(Flags), ' ');
+static inline void ProjectAddLinkerFlags(project * Project, const char * Flags){
+	StringSemanticSplitAlloc(&Project->LinkerFlags, StringCreate(Flags), ' ');
 }
 
-INLINE void ProjectResetLinkerFlags(project * Project){
-	StringListFree(&Project->LinkerFlags);
+static inline void ProjectResetLinkerFlags(project * Project){
+	StringListFreeAll(&Project->LinkerFlags);
 }
 
-INLINE void ProjectLinkLibs(project * Project, const char * Libs){
-	StringSemanticSplit(&Project->Libs, StringCreate(Libs), ' ');
+static inline void ProjectLinkLibs(project * Project, const char * Libs){
+	StringSemanticSplitAlloc(&Project->Libs, StringCreate(Libs), ' ');
 }
 
-INLINE void ProjectResetLibs(project * Project){
-	StringListFree(&Project->Libs);
+static inline void ProjectAddLibsDirs(project * Project, const char * Dirs){
+	StringSemanticSplitAlloc(&Project->LibsDirs, StringCreate(Dirs), ' ');
 }
 
-INLINE void ProjectAddIncludeDirs(project * Project, const char * Dirs){
-	StringSemanticSplit(&Project->IncludeDirs, StringCreate(Dirs), ' ');
+static inline void ProjectResetLibsDirs(project * Project){
+	StringListFreeAll(&Project->LibsDirs);
 }
 
-INLINE void ProjectResetIncludeDirs(project * Project){
-	StringListFree(&Project->IncludeDirs);
+static inline void ProjectResetLibs(project * Project){
+	StringListFreeAll(&Project->Libs);
 }
 
-INLINE void ProjectAddDefines(project * Project, const char * Defines){
-	StringSemanticSplit(&Project->Defines, StringCreate(Defines), ' ');
+static inline void ProjectAddIncludeDirs(project * Project, const char * Dirs){
+	StringSemanticSplitAlloc(&Project->IncludeDirs, StringCreate(Dirs), ' ');
 }
 
-INLINE void ProjectResetDefines(project * Project){
-	StringListFree(&Project->Defines);
+static inline void ProjectResetIncludeDirs(project * Project){
+	StringListFreeAll(&Project->IncludeDirs);
 }
 
-INLINE void ProjectExportSymbols(project * Project, const char * Symbols){
-	StringSemanticSplit(&Project->Symbols, StringCreate(Symbols), ' ');
+static inline void ProjectAddDefines(project * Project, const char * Defines){
+	StringSemanticSplitAlloc(&Project->Defines, StringCreate(Defines), ' ');
 }
 
-INLINE void ProjectResetSymbols(project * Project){
-	StringListFree(&Project->Symbols);
+static inline void ProjectResetDefines(project * Project){
+	StringListFreeAll(&Project->Defines);
 }
 
-INLINE void ProjectWait(project * Project){
+static inline void ProjectExportSymbols(project * Project, const char * Symbols){
+	StringSemanticSplitAlloc(&Project->Symbols, StringCreate(Symbols), ' ');
+}
+
+static inline void ProjectResetSymbols(project * Project){
+	StringListFreeAll(&Project->Symbols);
+}
+
+static inline void ProjectLink(project * LinkingProject, project * LinkedProject){
+	string Lib = StringFormat(STR("%/%/%.lib"), STR(LinkedProject->OutputPath), STR(LinkedProject->Name), STR(LinkedProject->Name));
+	ProjectLinkLibs(LinkingProject, Lib.Base);
+	StringFree(&Lib);
+}
+
+static inline void ProjectWait(project * Project){
 	if(Project->Thread){
 		WaitForSingleObject(Project->Thread, INFINITE);
 	}
 }
 
-INLINE void ProjectLaunch(project * Project){
+static inline void ProjectLaunch(project * Project){
 	string Command;
 	if(Project->OutputPath){
-		Command = StringFormat(STR("start %/%"), STR(Project->OutputPath), STR(Project->Name));
+		Command = StringFormat(STR("cd %/%/ & start %.exe"), STR(Project->OutputPath), STR(Project->Name), STR(Project->Name));
 	}else{
-		Command = StringFormat(STR("start %"), STR(Project->Name));
+		Command = StringFormat(STR("cd %/ start %.exe"), STR(Project->Name), STR(Project->Name));
 	}
-	ExecuteCommand(Command.Base, 0);
+	system(Command.Base);
 	StringFree(&Command);
 }
 
-string MSVCGenerateCompilationCommand(project * Project){
-	switch(Project->Output){
+static inline b32 ProjectIsRunning(project * Project){
+	if(Project->Output != OUTPUT_EXECUTABLE){
+		return 0;
+	}
+	
+	string Process;
+	if(Project->OutputPath){
+		Process = StringFormat(STR("%/%.exe"), STR(Project->OutputPath), STR(Project->Name));
+	}else{
+		Process = StringFormat(STR("%.exe"), STR(Project->Name));
+	}
+	b32 Result = ProcessIsRunning(Process.Base);
+	StringFree(&Process);
+	return Result;
+}
+
+static string MSVCGenerateCompilationCommand(project * Project){
 		string OutputExtension;
+	switch(Project->Output){
 		
 		case OUTPUT_EXECUTABLE:{
 			OutputExtension = STR(".exe");
@@ -913,14 +1068,14 @@ string MSVCGenerateCompilationCommand(project * Project){
 	
 	string_list RawDefines = StringListCopy(&Project->Defines);
 	for(int i = 0; i < RawDefines.Size; i++){
-		RawDefines.Base[i] = StringFormat(STR("/D%"), RawDefines.Base[i]);
+		RawDefines.Base[i] = StringFormat(STR("/D%"), Project->Defines.Base[i]);
 	}
 	string Defines = StringListJoin(&RawDefines, ' ');
 	StringListFreeAll(&RawDefines);
 	
 	string_list RawIncludeDirs = StringListCopy(&Project->IncludeDirs);
 	for(int i = 0; i < RawIncludeDirs.Size; i++){
-		RawIncludeDirs.Base[i] = StringFormat(STR("/D%"), RawIncludeDirs.Base[i]);
+		RawIncludeDirs.Base[i] = StringFormat(STR("/external:I%"), Project->IncludeDirs.Base[i]);
 	}
 	string IncludeDirs = StringListJoin(&RawIncludeDirs, ' ');
 	StringListFreeAll(&RawIncludeDirs);
@@ -930,14 +1085,14 @@ string MSVCGenerateCompilationCommand(project * Project){
 	
 	string_list RawSymbols = StringListCopy(&Project->Symbols);
 	for(int i = 0; i < RawSymbols.Size; i++){
-		RawSymbols.Base[i] = StringFormat(STR("/EXPORT:%"), RawSymbols.Base[i]);
+		RawSymbols.Base[i] = StringFormat(STR("/EXPORT:%"), Project->Symbols.Base[i]);
 	}
 	string Symbols = StringListJoin(&RawSymbols, ' ');
 	StringListFreeAll(&RawSymbols);
 	
 	string_list RawLibsDirs = StringListCopy(&Project->LibsDirs);
 	for(int i = 0; i < RawLibsDirs.Size; i++){
-		RawLibsDirs.Base[i] = StringFormat(STR("/D%"), RawLibsDirs.Base[i]);
+		RawLibsDirs.Base[i] = StringFormat(STR("/LIBPATH:%"), Project->LibsDirs.Base[i]);
 	}
 	string LibsDirs = StringListJoin(&RawLibsDirs, ' ');
 	StringListFreeAll(&RawLibsDirs);
@@ -945,7 +1100,7 @@ string MSVCGenerateCompilationCommand(project * Project){
 	string CompilationCommand;
 	
 	if(Project->Output != OUTPUT_LIBRARY){
-		CompilationCommand = StringFormat(STR("cl /nologo /Fo:\"%\" /Fe:\"%\" /Fd:\"%\" % % % % /link % % % %"), TUnitPath, TUnitPath ,TUnitPath, CompilerFlags, Defines, SourceFiles, IncludeDirs, LinkerFlags, LibsDirs, Libs, Symbols);
+		CompilationCommand = StringFormat(STR("cl /nologo /Fo:\"%\" /Fe:\"%\" /Fd:\"%\" % % % % /link % % % % /OUT:\"%/%/%%\""), TUnitPath, TUnitPath ,TUnitPath, CompilerFlags, Defines, SourceFiles, IncludeDirs, LinkerFlags, LibsDirs, Libs, Symbols, STR(Project->OutputPath),  STR(Project->Name), STR(Project->Name), OutputExtension);
 	}else{
 		CompilationCommand = StringFormat(STR("cl /nologo /Fo:\"%\" /Fe:\"%\" /Fd:\"%\" % % % %"), TUnitPath, TUnitPath ,TUnitPath, CompilerFlags, Defines, SourceFiles, IncludeDirs);
 	}
@@ -966,87 +1121,84 @@ string MSVCGenerateCompilationCommand(project * Project){
 	return CompilationCommand;
 }
 
-string MSVCGenerateLinkCommand(project * Project){
+static string MSVCGenerateLinkCommand(project * Project){
 	string Libs = StringListJoin(&Project->Libs, ' ');
 	string LinkerFlags = StringListJoin(&Project->LinkerFlags, ' ');
 	
 	string_list RawSymbols = StringListCopy(&Project->Symbols);
 	for(int i = 0; i < RawSymbols.Size; i++){
-		RawSymbols.Base[i] = StringFormat(STR("/EXPORT:%"), RawSymbols.Base[i]);
+		RawSymbols.Base[i] = StringFormat(STR("/EXPORT:%"), Project->Symbols.Base[i]);
 	}
 	string Symbols = StringListJoin(&RawSymbols, ' ');
 	StringListFreeAll(&RawSymbols);
 	
 	string_list RawLibsDirs = StringListCopy(&Project->LibsDirs);
 	for(int i = 0; i < RawLibsDirs.Size; i++){
-		RawLibsDirs.Base[i] = StringFormat(STR("/D%"), RawLibsDirs.Base[i]);
+		RawLibsDirs.Base[i] = StringFormat(STR("/D%"), Project->LibsDirs.Base[i]);
 	}
 	string LibsDirs = StringListJoin(&RawLibsDirs, ' ');
 	StringListFreeAll(&RawLibsDirs);
 	
 	string TsPattern = StringFormat(STR("%/%/*.obj"), STR(Project->OutputPath), STR(Project->Name));
-	string_list RawTranslationUnits = StringListAlloc(8);
+	string_list RawTranslationUnits;
+	ZeroMemory(RawTranslationUnits);
 	FileGLOB(&RawTranslationUnits, TsPattern.Base);
 	StringFree(&TsPattern);
 	string TranslationUnits = StringListJoin(&RawTranslationUnits, ' ');
-	//StringListFreeAll(&RawTranslationUnits);
+	StringListFreeAll(&RawTranslationUnits);
 
-	string LinkCommand = StringFormat(STR("lib % % % % % /OUT:\"%/%.lib\""), TranslationUnits, LinkerFlags, LibsDirs, Libs, Symbols, STR(Project->OutputPath),  STR(Project->Name));
+	string LinkCommand = StringFormat(STR("lib % % % % % /OUT:\"%/%/%.lib\""), TranslationUnits, LinkerFlags, LibsDirs, Libs, Symbols, STR(Project->OutputPath),  STR(Project->Name), STR(Project->Name));
 	
 	StringFree(&Libs);
 	StringFree(&LibsDirs);
 	StringFree(&LinkerFlags);
 	StringFree(&Symbols);
-	
+	StringFree(&TranslationUnits);
 	return LinkCommand;
 }
 
-void Compile(compilation_data Data){
+static void Compile(compilation_data Data){
 	project * Project = Data.Project;
-	
 	string Command = MSVCGenerateCompilationCommand(Project);
-	string LinkCommand;
-	
-	if(Project->Output = OUTPUT_LIBRARY){
-		LinkCommand = MSVCGenerateLinkCommand(Project);
-	}
-	
 	string Output;
-	string LinkOutput;
-	
+
 #if !QUIET_MODE	
 	string StartTime = TimeGetCurrent();
-	StringPrintf(STR("Compilation of % started at %"), STR(Project->Name), StartTime);
+	StringPrintf(STR("\nCompilation of % started at %"), STR(Project->Name), StartTime);
 	StringFree(&StartTime);
-	
+
+	StringPrintf(STR("\n%\n"), Command);
 	u64 Ticks = QueryPerformanceGetCounter();
 #endif
 
 	s32 ErrorCode = ExecuteCommand(Command.Base, &Output);
-	if(Project->Output = OUTPUT_LIBRARY){
-		StringPrintsl(LinkCommand);
-		ErrorCode |= ExecuteCommand(LinkCommand.Base, &LinkOutput);
-	}
-	
+
 #if !QUIET_MODE
 	Ticks = QueryPerformanceGetCounter() - Ticks;
 	string EndTime = TimeGetCurrent();
 	
-	f64 Seconds = Ticks / QueryPerfonceGetFreq();
+	f64 Seconds = (f64)Ticks / QueryPerfonceGetFreq();
 	
-	if(true){
-		StringPrintsl(Output);
-		if(Project->Output = OUTPUT_LIBRARY){
-			StringPrintsl(LinkOutput);
-		}
-	}
-
+	if(ErrorCode) StringPrintsl(Output);
 	
 	string Result = (ErrorCode) ? STR("exited") : STR("finished");
-	StringPrintf(STR("Compilation of % % at % after ms(s)"), STR(Project->Name), Result, EndTime/*, Seconds * 1000, Seconds*/);
+	string Ms = F64ToString(Seconds * 1000, 3);
+	string Sc = F64ToString(Seconds, 3);
+	StringPrintf(STR("Compilation of % % at % after %ms(%s)\n"), STR(Project->Name), Result, EndTime, Ms, Sc);
 	StringFree(&EndTime);
-	
+	StringFree(&Ms);
+	StringFree(&Sc);
 #endif
+	*Data.ErrorCode |= ErrorCode;
+	
+	if(Project->Output == OUTPUT_LIBRARY){
+		string LinkCommand = MSVCGenerateLinkCommand(Project);
+		//StringPrintf(LinkCommand);
+		string LinkOutput;
+		ErrorCode = ExecuteCommand(LinkCommand.Base, &LinkOutput);
+		*Data.ErrorCode |= ErrorCode;
+		if(ErrorCode) StringPrintsl(LinkOutput);
+	} 
 	
 	StringFree(&Output);
 	
@@ -1056,6 +1208,8 @@ void Compile(compilation_data Data){
 	}
 }
 
+#if 0
+// NOTE(Nabbo): Currently broken
 static void ProjectCompile(project * Project, s32 * ErrorCode){
 	compilation_data Data;
 	Data.Project = MemReplicate(Project);
@@ -1067,8 +1221,9 @@ static void ProjectCompile(project * Project, s32 * ErrorCode){
 		// TODO(Nabbo): Assertion!
 	}
 }
+#endif
 
-INLINE s32 ProjectCompileAndWait(project * Project){
+static inline s32 ProjectCompileAndWait(project * Project){
 	compilation_data Data;
 	Data.Project = Project;
 	s32 ErrorCode = 0;
@@ -1080,11 +1235,15 @@ INLINE s32 ProjectCompileAndWait(project * Project){
 	return ErrorCode;
 }
 
+#ifdef ENTRY_POINT
+
 void ENTRY_POINT();
 
-int main(void){
+int main(s32 Argc, char * Argv[]){
+	ArgumentsLoad(Argc, Argv);
 	ENTRY_POINT();
 	return 0;							
 }
+#endif
 
 #endif //MAKEC_H
