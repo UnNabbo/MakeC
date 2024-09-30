@@ -245,5 +245,5 @@ static inline void ProjectLaunch(project * Project);
  * If not nothing will happen
 */
 
-static inline b32 ProjectIsRunning(project * Project);
+static inline int ProjectIsRunning(project * Project);
 // Checks if a given project executable is running, will return false if project output is not OUTPUT_EXECUTABLE
