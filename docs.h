@@ -24,17 +24,14 @@ static char* EnvironmentVariableGet(const char* VarName);
 // Get the value of an environment variable
 
 
-static s32 ProcessIsRunning(const char* ProcessName);
+static int ProcessIsRunning(const char* ProcessName);
 // Check if a given process is running
-
-static string TimeGetCurrent();
-// Gets current time in H:M:S format
 
 // ----------------------------------
 //  Command Lines Arguments Handling
 // ----------------------------------
 
-static s32 ArgumentsSearch(const char * Args);
+static int ArgumentsSearch(const char * Args);
 /* Searches for given args in the args given in command line returning:
  * -1 if no arguments was found and the position of the arguments in 
  * the args string if it was found 
@@ -233,7 +230,7 @@ static inline void ProjectLink(project * LinkingProject, project * LinkedProject
 //  Project start execution
 // -------------------------
 
-static inlinevoid ProjectCompileAndWait(project* Project);
+static inline void ProjectCompileAndWait(project* Project);
 // Start the compilation process of your project and stalls the execution until it has terminated
 
 static inline void ProjectLaunch(project * Project);
