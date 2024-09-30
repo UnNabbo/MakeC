@@ -203,21 +203,21 @@ static inline void ProjectResetLibsDirs(project* Project);
  */
 
 
-static inlinevoid ProjectResetIncludeDirs(project* Project);
+static inline void ProjectResetIncludeDirs(project* Project);
 /*
  * Clear the directories given to the project
  * See `ProjectAddIncludeDirs`
  */
 
 
-static inlinevoid ProjectResetDefines(project* Project);
+static inline void ProjectResetDefines(project* Project);
 /*
  * Clear the defines given to the project
  * See `ProjectAddDefines`
  */
 
 
-static inlinevoid ProjectResetSymbols(project* Project);
+static inline void ProjectResetSymbols(project* Project);
 /*
  * Clear the symbols given to the project
  * See `ProjectExportSymbols`
