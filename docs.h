@@ -1,4 +1,4 @@
-//Special thanks to  Quattro(https://github.com/QuattroMusic) for most of this documentation.
+//Special thanks to Quattro (https://github.com/QuattroMusic) for most of this documentation.
 
 // ----------------
 //  Files Handling
@@ -7,17 +7,14 @@
 static void FolderCreate(const char* Path);
 // Creates a folder in the given path if it doesn't already exist
 
-
 static void FilesCopyAll(const char* Source, const char* Destination);
 // Copy all the files and folders from `Source` to `Destination`
-
 
 static void FilesCopyAllMatching(const char* Source, const char* Destination, const char* Pattern);
 // Copy all the files and folders from `Source` to `Destination` with a given pattern (extension)
 
-
 // -----------------
-//  System handling
+//  System Handling
 // -----------------
 
 static char* EnvironmentVariableGet(const char* VarName);
@@ -32,10 +29,10 @@ static int ProcessIsRunning(const char* ProcessName);
 // ----------------------------------
 
 static int ArgumentsSearch(const char * Args);
-/* Searches for given args in the args given in command line returning:
+/* Searches for given args in the args given in command line, returning:
  * -1 if no arguments was found and the position of the arguments in 
  * the args string if it was found 
-
+ */
 
 // ------------------
 //  Project Handling
@@ -55,7 +52,6 @@ project ProjectCreate(const char* Name, u32 Compiler, u32 Output);
  * - OUTPUT_LIBRARY
  */
 
-
 static inline void ProjectSetCompiler(project* Project, u32 Compiler);
 /*
  * Sets the compiler of a project
@@ -63,7 +59,6 @@ static inline void ProjectSetCompiler(project* Project, u32 Compiler);
  * Compiler is one of
  * - COMPILER_MSVC
  */
-
 
 static inline void ProjectSetOutputType(project* Project, u32 Output);
 /*
@@ -75,12 +70,10 @@ static inline void ProjectSetOutputType(project* Project, u32 Output);
  * - OUTPUT_LIBRARY
  */
 
-
 static inline void ProjectSetFilePath(project* Project, const char* Path);
 /*
  * Set the path of the source files given to the compiler
  */
-
 
 static inline void ProjectSetOutputPath(project* Project, const char* Path);
 /*
@@ -100,7 +93,6 @@ static inline void ProjectAddFiles(project* Project, const char* Files);
  * Example: "file1.cpp file2.cpp file3.cpp"
  */
 
-
 static inline void ProjectAddCompilerFlags(project* Project, const char* Flags);
 /*
  * give a list of definitions to your project
@@ -109,15 +101,11 @@ static inline void ProjectAddCompilerFlags(project* Project, const char* Flags);
  * Example: "/O2 /Zi /GL"
  */
 
-
 static inline void ProjectAddLinkerFlags(project* Project, const char* Flags);
 /*
  * Give a list of definitions to the linker
  * `Flags` is a string with space separated definitions
- *
- * Example: TODO
  */
-
 
 static inline void ProjectLinkLibs(project* Project, const char* Libs);
 /*
@@ -132,7 +120,7 @@ static inline void ProjectAddLibsDirs(project* Project, const char* Dirs);
  * Give a list of directories to search for lib files in your project
  * `Dirs` is a string with space separated directories
  *
- * Example: "game/headers engine/headers"
+ * Example: "Third_Party/libs Shared/libs"
  */
 
 static inline void ProjectAddIncludeDirs(project* Project, const char* Dirs);
@@ -151,7 +139,6 @@ static inline void ProjectAddDefines(project* Project, const char* Defines);
  * Example: "NO_LOG RELEASE NO_CONSOLE"
  */
 
-
 static inline void ProjectExportSymbols(project* Project, const char* Symbols);
 /*
  * give a list of functions / variables names
@@ -165,13 +152,11 @@ static inline void ProjectExportSymbols(project* Project, const char* Symbols);
 //  Project reset data
 // --------------------
 
-
 static inline void ProjectResetFiles(project* Project);
 /*
  * Clear the source files to be compiled by the project
  * See `ProjectAddSourceFiles`
  */
-
 
 static inline void ProjectResetCompilerFlags(project* Project);
 /*
@@ -179,13 +164,11 @@ static inline void ProjectResetCompilerFlags(project* Project);
  * See `ProjectAddCompilerFlags`
  */
 
-
 static inline void ProjectResetLinkerFlags(project* Project);
 /*
  * Clear the linker definitions to the project
  * See `ProjectAddLinkerFlags`
  */
-
 
 static inline void ProjectResetLibs(project* Project);
 /*
@@ -199,20 +182,17 @@ static inline void ProjectResetLibsDirs(project* Project);
  * See `ProjectAddLibsDirs`
  */
 
-
 static inline void ProjectResetIncludeDirs(project* Project);
 /*
  * Clear the directories given to the project
  * See `ProjectAddIncludeDirs`
  */
 
-
 static inline void ProjectResetDefines(project* Project);
 /*
  * Clear the defines given to the project
  * See `ProjectAddDefines`
  */
-
 
 static inline void ProjectResetSymbols(project* Project);
 /*
@@ -226,6 +206,7 @@ static inline void ProjectLink(project * LinkingProject, project * LinkedProject
  * -OUTPUT_LIBRARY
  * -OUTPUT_DYNAMIC_LIBRARY
  */
+ 
 // -------------------------
 //  Project start execution
 // -------------------------
@@ -235,14 +216,8 @@ static inline void ProjectCompileAndWait(project* Project);
 
 static inline void ProjectLaunch(project * Project);
 /* 
- * If the Project output is OUTPUT_EXECUTABLE, sai project will start it's execution
- * If not nothing will happen
-*/
-
-static inline void ProjectLaunch(project * Project);
-/* 
- * If the Project output is OUTPUT_EXECUTABLE, sai project will start it's execution
- * If not nothing will happen
+ * If the Project output is OUTPUT_EXECUTABLE, said project will start it's execution
+ * If not, nothing will happen
 */
 
 static inline int ProjectIsRunning(project * Project);
