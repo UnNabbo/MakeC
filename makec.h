@@ -680,20 +680,25 @@ static s32 ExecuteCommand(char * Command, string * String){
     }
 	char PipeBuffer[1024];
 	ZeroMemory(PipeBuffer);
+	char Output[4096];
+	ZeroMemory(Output);
+	s32 Offset = 0;
 	
 	s32 ErrorCode = 0;
 
 	while (fgets(PipeBuffer, sizeof(PipeBuffer), Console) != 0) {
-		if (strstr(PipeBuffer, "error") || strstr(PipeBuffer, "fatal")) {
-			ErrorCode = 1;
-		}
-		if (strstr(PipeBuffer, "Error") || strstr(PipeBuffer, "Fatal")) {
+		int IsError = strstr(PipeBuffer, "error") != NULL;
+		int IsWarning = strstr(PipeBuffer, "warning") != NULL;
+		int IsNote = strstr(PipeBuffer, "note") != NULL;
+		if (IsError | IsWarning | IsNote) {
+			s32 Len = strlen(PipeBuffer);
+			MemCopy(Output + Offset, PipeBuffer, Len);
+			Offset += Len;
 			ErrorCode = 1;
 		}
 	}
-	
 	if(String){
-		* String = StringAlloc(PipeBuffer);
+		* String = StringAlloc(Output);
 	}
 	
 	PipeClose(Console);
@@ -708,6 +713,15 @@ static void FolderCreate(const char * Path){
 	ExecuteCommand(Command.Base, 0);
 	StringFree(&Command);
 }
+
+static void FileRename(const char * Path, const char * NewPath){
+	string Command = StringFormat(STR("mv \"%\" \"%\""), STR(Path),  STR(NewPath));
+	StringPrint(Command);
+	ExecuteCommand(Command.Base, 0);
+	StringFree(&Command);
+}
+
+
 
 static void FilesCopyAll(const char * Source, const char * Destination){
 	string Command = StringFormat(STR("robocopy \"%\" \"%\""), STR(Source), STR(Destination));
@@ -1100,9 +1114,9 @@ static string MSVCGenerateCompilationCommand(project * Project){
 	string CompilationCommand;
 	
 	if(Project->Output != OUTPUT_LIBRARY){
-		CompilationCommand = StringFormat(STR("cl /nologo /Fo:\"%\" /Fe:\"%\" /Fd:\"%\" % % % % /link % % % % /OUT:\"%/%/%%\""), TUnitPath, TUnitPath ,TUnitPath, CompilerFlags, Defines, SourceFiles, IncludeDirs, LinkerFlags, LibsDirs, Libs, Symbols, STR(Project->OutputPath),  STR(Project->Name), STR(Project->Name), OutputExtension);
+		CompilationCommand = StringFormat(STR("cl /nologo /FC /Fo:\"%\" /Fe:\"%\" /Fd:\"%\" % % % % /link % % % % /OUT:\"%/%/%%\""), TUnitPath, TUnitPath ,TUnitPath, CompilerFlags, Defines, SourceFiles, IncludeDirs, LinkerFlags, LibsDirs, Libs, Symbols, STR(Project->OutputPath),  STR(Project->Name), STR(Project->Name), OutputExtension);
 	}else{
-		CompilationCommand = StringFormat(STR("cl /nologo /Fo:\"%\" /Fe:\"%\" /Fd:\"%\" % % % %"), TUnitPath, TUnitPath ,TUnitPath, CompilerFlags, Defines, SourceFiles, IncludeDirs);
+		CompilationCommand = StringFormat(STR("cl /nologo /FC /Fo:\"%\" /Fe:\"%\" /Fd:\"%\" % % % %"), TUnitPath, TUnitPath ,TUnitPath, CompilerFlags, Defines, SourceFiles, IncludeDirs);
 	}
 	
 	StringFree(&TUnitPath);
@@ -1173,13 +1187,13 @@ static void Compile(compilation_data Data){
 
 	s32 ErrorCode = ExecuteCommand(Command.Base, &Output);
 
+	if(ErrorCode) StringPrintsl(Output);
 #if !QUIET_MODE
 	Ticks = QueryPerformanceGetCounter() - Ticks;
 	string EndTime = TimeGetCurrent();
 	
 	f64 Seconds = (f64)Ticks / QueryPerfonceGetFreq();
 	
-	if(ErrorCode) StringPrintsl(Output);
 	
 	string Result = (ErrorCode) ? STR("exited") : STR("finished");
 	string Ms = F64ToString(Seconds * 1000, 3);
@@ -1237,12 +1251,11 @@ static inline s32 ProjectCompileAndWait(project * Project){
 
 #ifdef ENTRY_POINT
 
-void ENTRY_POINT();
+s32 ENTRY_POINT();
 
 int main(s32 Argc, char * Argv[]){
 	ArgumentsLoad(Argc, Argv);
-	ENTRY_POINT();
-	return 0;							
+	return ENTRY_POINT();
 }
 #endif
 
