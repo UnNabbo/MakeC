@@ -250,6 +250,7 @@ typedef unsigned long long b64;
 #define MemRealloc(ptr, size) realloc(ptr, size)
 #define MemFree(ptr) free(ptr)
 #define MemCopy(dest, src, size) memcpy(dest, src, size)
+#define Assert(cond, text, ...) if(!(cond)){printf(text, __VA_ARGS__); exit(1);}
 
 void * _MemReplicateInternal(void * Ptr, u64 Size){
 	void * Alloc = MemAlloc(Size);
@@ -276,6 +277,35 @@ inline s32 CStringLenght(const char * String){
 	return i;
 }
 
+
+b32 CStringCompareN(const char * String1, const char* String2, s32 Len){
+    if(Len == 1){
+        return String1[0] == String2[0];
+    }
+    if(CStringLenght(String1) < Len) return false;
+    if(CStringLenght(String2) < Len) return false;
+    
+    b32 Result = true;
+    for(int i = 0; i < Len; i++){
+        Result &= String1[i] == String2[i];
+    }
+    return Result;
+}
+
+static b32 CStringCompare(char * Str1, char * Str2){
+	if(CStringLenght(Str1) != CStringLenght(Str2)){
+		return false;	
+	}
+	for(int i = 0; i < CStringLenght(Str1); i++){
+		if(Str1[i] != Str2[i]){
+			return false;
+		}
+	}
+	return true;
+}
+
+
+
 inline char * CStringAlloc(char * String){
 	s32 Size = CStringLenght(String);
 	char * NewString = MemAlloc(Size);
@@ -300,6 +330,7 @@ inline string StringCreateWithSize(const char * Text, s32 Size){
 inline string StringAlloc(char * Text){
 	string String;
 	String.Size = CStringLenght(Text);
+	printf("L: %i", String.Size);
 	String.Base = MemAlloc(String.Size + 1);
 	MemCopy(String.Base, Text, String.Size);
 	return String;
@@ -326,128 +357,6 @@ inline void StringFree(string * String){
 	String->Size = 0;
 }
 
-#if 0
-inline string S32ToString(s32 value){
-	char result[16];
-    char* ptr = result, *ptr1 = result, tmp_char;
-    s32 tmp_value;
-	
-    do {
-        tmp_value = value;
-        value /= 10;
-        *ptr++ = "zyxwvutsrqponmlkjihgfedcba9876543210123456789abcdefghijklmnopqrstuvwxyz" [35 + (tmp_value - value * base)];
-    } while ( value );
-	
-    // Apply negative sign
-    if (tmp_value < 0) *ptr++ = '-';
-    *ptr-- = '\0';
-	
-    // Reverse the string
-    while(ptr1 < ptr) {
-        tmp_char = *ptr;
-        *ptr--= *ptr1;
-        *ptr1++ = tmp_char;
-    }
-    return StringAlloc(result);
-}
-#endif
-
-
-inline string F64ToString(f64 Value, s32 Precision){
-	char Buffer[64];
-	char *Ptr = Buffer;
-	char Character;
-	if(Value < 0) {
-		Value = -Value;
-		*Ptr++ = '-';
-	}
-	Value += 0.000005;
-	u64 IntPart = Value;
-	Value -= IntPart;
-	if(!IntPart) {
-		*Ptr++ = '0';
-	} else {
-		char* P = Ptr;
-		while(IntPart) {
-			*P++ = '0' + IntPart % 10;
-			IntPart /= 10;
-		}
-		char* P1 = P;
-		
-		while(P > Ptr) {
-			Character = *--P;
-			*P = *Ptr;
-			*Ptr++ = Character;
-		}
-		Ptr = P1;
-	}
-	*Ptr++ = '.';
-	
-	while(Precision--) {
-		Value *= 10.0;
-		Character = Value;
-		*Ptr++ = '0' + Character;
-		Value -= Character;
-	}
-	
-	return StringAlloc(Buffer);
-}
-
-typedef struct{
-	string * Base;
-	s32 Reserved;
-	s32 Size;
-} string_list;
-
-static string_list StringListAlloc(s32 Size){
-	string_list List;
-	ZeroMemory(List);
-	List.Reserved = Size;
-	List.Base = (string *)MemAlloc(sizeof(string) * List.Reserved);
-	return List;
-}
-
-static void StringListRealloc(string_list* List, s32 NewSize) {
-    List->Reserved = NewSize;
-	if(!List->Base){
-		List->Base = (string *)MemAlloc(sizeof(string) * List->Reserved);
-	}else{
-		List->Base = (string *)MemRealloc(List->Base, sizeof(string) * List->Reserved);
-	}
-}
-
-static string_list StringListCopy(string_list* OldList){
-	string_list List;
-	ZeroMemory(List);
-	
-	List.Reserved = OldList->Reserved;
-	List.Base = (string *)MemAlloc(sizeof(string) * List.Reserved);
-	MemCopy(List.Base, OldList->Base, List.Reserved);
-	List.Size = OldList->Size;
-	
-	return List;
-}
-
-static void StringListFreeAll(string_list* List) {
-	for(int i = 0; i < List->Size; i++){
-		StringFree(&List->Base[i]);
-	}
-	MemFree(List->Base);
-	ZeroMemory(*List);
-}
-
-static void StringListFree(string_list* List) {
-	MemFree(List->Base);
-	ZeroMemory(*List);
-}
-
-static string  StringListAt(string_list * List, s32 Index){
-	return List->Base[Index];
-}
-
-static char * StringListAtCSTR(string_list * List, s32 Index){
-	return List->Base[Index].Base;
-}
 
 static b32 StringCompare(string Str1, string Str2){
 	if(Str1.Size != Str2.Size){
@@ -461,20 +370,77 @@ static b32 StringCompare(string Str1, string Str2){
 	return true;
 }
 
-static string * StringListAppend(string_list * List, string Data) {
-    if (List->Size + 1 > List->Reserved) {
-		List->Reserved = (!List->Reserved) ? 8 : List->Reserved;
-		StringListRealloc(List, List->Reserved * 2);
-    }
-	
-    List->Base[List->Size] = Data;
-	return &List->Base[List->Size++];
+static b32 CharacterIsValid(char Char){
+	return ( Char >= 'a' && Char <= 'z') || (Char >= 'A' && Char <= 'Z' || (Char >= '0' && Char <= '9') || Char == '/' || Char == '-' || Char == '_' || Char == '.');
 }
 
-static string StringListJoin(string_list* List, char Token){
+#define ARRAY_DEF_SIZE 16
+typedef struct{
+    s32 Size;
+    s32 Reserved;
+    u64 Stride;
+} _internal_array_layout;
+
+#define _ArrayInternal(Array) ((_internal_array_layout*)(((s8*)Array) - sizeof(_internal_array_layout)))
+
+#define _Temporary(x, Name) __typeof__((x)) Name = (x)
+
+static void * _ArrayAllocInternal(u64 Stride){
+    _internal_array_layout* Array = MemAlloc(sizeof(_internal_array_layout) + Stride * ARRAY_DEF_SIZE);
+
+    Array->Size = 0;
+    Array->Reserved = ARRAY_DEF_SIZE;
+    Array->Stride = Stride;
+    
+    s8* Data = ((s8*)Array) + sizeof(_internal_array_layout);
+    return Data;
+}
+
+static void _ArrayReallocInternal(u8** Base, u64 NewSize){
+    _internal_array_layout* Array = _ArrayInternal(*Base);
+    Array->Reserved = NewSize;
+    Array = MemRealloc(Array, sizeof(_internal_array_layout) + Array->Stride * Array->Reserved);
+	*Base = ((s8*)Array) + sizeof(_internal_array_layout);
+}
+
+static void * _ArrayAppendInternal(u8 ** Base, void * Data){
+	Assert(*Base, "[ERROR] Array was not inizialized");
+    _internal_array_layout* Array = _ArrayInternal(*Base);
+    if(Array->Size + 1 > Array->Reserved){
+        _ArrayReallocInternal(Base, Array->Reserved * 8);
+		Array = _ArrayInternal(*Base);
+    }
+    u8* Slot = *Base + Array->Size++ * Array->Stride;
+    MemCopy(Slot, Data, Array->Stride);
+	return Slot;
+}
+
+
+static void * _ArrayCopyInternal(u8 ** Base){
+    _internal_array_layout* ToCopy = _ArrayInternal(*Base);
+	_internal_array_layout* Array = MemAlloc(sizeof(_internal_array_layout) + ToCopy->Stride * ToCopy->Reserved);
+
+    MemCopy(Array, ToCopy, sizeof(_internal_array_layout) + ToCopy->Stride * ToCopy->Reserved);
+    return ((s8*)Array) + sizeof(_internal_array_layout);
+}
+
+#define ArrayAlloc(Type) _ArrayAllocInternal(sizeof(Type))
+#define ArrayCopy(Array) _ArrayCopyInternal((u8**)&Array)
+#define ArrayFree(Array) MemFree((void*)_ArrayInternal(Array))
+#define ArrayFreeAll(Array) for_each(item, Array){MemFree(item);};MemFree((void*)_ArrayInternal(Array))
+#define ArraySize(Array) _ArrayInternal(Array)->Size
+#define ArrayReserved(Array) _ArrayInternal(Array)->Reserved
+
+#define ArrayAppend(Array, Data) _ArrayAppendInternal((u8**)Array, Data)
+
+#define for_each(Var, Array)\
+for(int Var##Index = 0, _=1;_;_=0) \
+for(__typeof__((Array[0])) Var = (Array[0]); Var##Index < ArraySize(Array); Var = Array[++Var##Index])
+
+static string StringListJoin(string** List, char Token){
 	s32 Size = 0;
-	for(int i = 0; i < List->Size; i++){
-		string String = StringListAt(List, i);
+	for(int i = 0; i < ArraySize(*List); i++){
+		string String = (*List)[i];
 		Size += String.Size + 1;
 	}
 	
@@ -482,12 +448,12 @@ static string StringListJoin(string_list* List, char Token){
 	string Result = StringAllocWithSize(Size);
 	memset(Result.Base, 64, Size);
 	s32 Offset = 0;
-	for(int i = 0; i < List->Size; i++){
-		if(i){
+	for(int i = 0; i < ArraySize(*List); i++){
+		if(i && Token){
 			Result.Base[Offset] = Token;
 			Offset += 1;
 		}
-		string String = StringListAt(List, i);
+		string String = (*List)[i];
 		MemCopy(Result.Base + Offset, String.Base, String.Size);
 		Offset += String.Size;
 		
@@ -496,16 +462,18 @@ static string StringListJoin(string_list* List, char Token){
 }
 
 
-static void StringSplit(string_list* List, string String, char Token){
+static void StringSplit(string** List, string String, char Token){
 	s32 i = 0, Offset = 0;
 	while(true){
 		if(!String.Base[i]){
-			StringListAppend(List, StringCreateWithSize(String.Base + Offset, i - Offset));
+			string Entry =  StringCreateWithSize(String.Base + Offset, i - Offset);
+			ArrayAppend(List, &Entry);
 			break;
 		}
 		
 		if(String.Base[i] == Token && String.Base[i + 1]){
-			StringListAppend(List, StringCreateWithSize(String.Base + Offset, i - Offset));
+			string Entry =  StringCreateWithSize(String.Base + Offset, i - Offset);
+			ArrayAppend(List, &Entry);
 			Offset = i + 1;
 		}
 		
@@ -513,7 +481,7 @@ static void StringSplit(string_list* List, string String, char Token){
 	}
 }
 
-static void StringSemanticSplit(string_list* List, string String, char Token){
+static void StringSemanticSplit(string** List, string String, char Token){
 	s32 i = 0, Offset = 0, Quotes = 0;
 	
 	while(true){
@@ -522,12 +490,14 @@ static void StringSemanticSplit(string_list* List, string String, char Token){
 		}
 		
 		if(!String.Base[i] && !Quotes){
-			StringListAppend(List, StringCreateWithSize(String.Base + Offset, i - Offset));
+			string Entry = StringCreateWithSize(String.Base + Offset, i - Offset);
+			ArrayAppend(List, &Entry);
 			break;
 		}
 		
 		if(String.Base[i] == Token && String.Base[i + 1]){
-			StringListAppend(List, StringCreateWithSize(String.Base + Offset, i - Offset));
+			string Entry = StringCreateWithSize(String.Base + Offset, i - Offset);
+			ArrayAppend(List, &Entry);
 			Offset = i + 1;
 		}
 		
@@ -535,7 +505,7 @@ static void StringSemanticSplit(string_list* List, string String, char Token){
 	}
 }
 
-static void StringSemanticSplitAlloc(string_list* List, string String, char Token){
+static void StringSemanticSplitAlloc(string** List, string String, char Token){
 	s32 i = 0, Offset = 0, Quotes = 0;
 	
 	while(true){
@@ -544,12 +514,14 @@ static void StringSemanticSplitAlloc(string_list* List, string String, char Toke
 		}
 		
 		if(!String.Base[i] && !Quotes){
-			StringListAppend(List, StringAllocSubstr(String.Base + Offset, i - Offset));
+			string Entry = StringAllocSubstr(String.Base + Offset, i - Offset);
+			ArrayAppend(List, &Entry);
 			break;
 		}
 		
 		if(String.Base[i] == Token && String.Base[i + 1]){
-			StringListAppend(List, StringAllocSubstr(String.Base + Offset, i - Offset));
+			string Entry = StringAllocSubstr(String.Base + Offset, i - Offset);
+			ArrayAppend(List, &Entry);
 			Offset = i + 1;
 		}
 		
@@ -560,8 +532,7 @@ static void StringSemanticSplitAlloc(string_list* List, string String, char Toke
 static string StringFormat(string Format, ...){
 	va_list arg;
 	
-	string_list List;	
-	ZeroMemory(List);
+	string *List = ArrayAlloc(string);	
 	
 	s32 Size = Format.Size;
 	
@@ -573,7 +544,8 @@ static string StringFormat(string Format, ...){
 	
 	for(int i = 0; i < Format.Size; i++){
 		if(Format.Base[i] == '%'){
-			string * String = StringListAppend(&List, va_arg(arg, string));
+			string Entry = va_arg(arg, string);
+			string * String = ArrayAppend(&List, &Entry);
 			Size += String->Size - 1;
 		}
 	}
@@ -585,7 +557,7 @@ static string StringFormat(string Format, ...){
 	u32 ListIndex = 0;
 	for(int i = 0; i < Format.Size; i++){
 		if(Format.Base[i] == '%'){
-			string String = StringListAt(&List, ListIndex++);
+			string String = List[ListIndex++];
 			MemCopy(Formatted.Base + Offset + OffsetDelta, Format.Base + Offset, i - Offset);
 			
 			MemCopy(Formatted.Base + Offset + OffsetDelta + i - Offset, String.Base, String.Size);
@@ -597,28 +569,27 @@ static string StringFormat(string Format, ...){
 	
 	MemCopy(Formatted.Base + Offset + OffsetDelta, Format.Base + Offset, Format.Size - Offset);
 	
-	StringListFree(&List);
+	ArrayFree(List);
 	return Formatted;
 }
 
-static void StringPrintsl(string Text){
+static void Printsl(string Text){
 	for(int i = 0; i < Text.Size; i++){
 		putchar(Text.Base[i]);
 	}
 }
 
-static void StringPrint(string Text){
+static void Print(string Text){
 	for(int i = 0; i < Text.Size; i++){
 		putchar(Text.Base[i]);
 	}
 	putchar('\n');
 }
 
-static void StringPrintf(string Format, ...){
+static void Printf(string Format, ...){
 	va_list arg;
 	
-	string_list List;	
-	ZeroMemory(List);
+	string * List = ArrayAlloc(string);	
 	
 	s32 Size = Format.Size;
 	
@@ -630,9 +601,9 @@ static void StringPrintf(string Format, ...){
 	
 	for(int i = 0; i < Format.Size; i++){
 		if(Format.Base[i] == '%'){
-		
-			string * String = StringListAppend(&List, va_arg(arg, string));
-			Size += String->Size - 1;
+			string Entry = va_arg(arg, string);
+			ArrayAppend(&List, &Entry);
+			Size += Entry.Size - 1;
 		}
 	}
 	va_end (arg);
@@ -643,7 +614,7 @@ static void StringPrintf(string Format, ...){
 	u32 ListIndex = 0;
 	for(int i = 0; i < Format.Size; i++){
 		if(Format.Base[i] == '%'){
-			string String = StringListAt(&List, ListIndex++);
+			string String = List[ListIndex++];
 			MemCopy(Formatted.Base + Offset + OffsetDelta, Format.Base + Offset, i - Offset);
 			
 			MemCopy(Formatted.Base + Offset + OffsetDelta + i - Offset, String.Base, String.Size);
@@ -655,9 +626,9 @@ static void StringPrintf(string Format, ...){
 	
 	MemCopy(Formatted.Base + Offset + OffsetDelta, Format.Base + Offset, Format.Size - Offset);
 	
-	StringListFree(&List);
+	ArrayFree(List);
 	
-	StringPrint(Formatted);
+	Printsl(Formatted);
 	
 	StringFree(&Formatted);
 }
@@ -673,14 +644,15 @@ static void StringPrintf(string Format, ...){
 #define PipeClose _pclose
 #endif
 
-static s32 ExecuteCommand(char * Command, string * String){
+static s32 ExecuteCommand(char * Command){
 	FILE* Console = PipeOpen(Command, "r");
 	if (!Console) {
         printf("Failed to open pipe\n");
     }
 	char PipeBuffer[1024];
 	ZeroMemory(PipeBuffer);
-	char Output[4096];
+	
+	char Output[4096 * 16];
 	ZeroMemory(Output);
 	s32 Offset = 0;
 	
@@ -697,10 +669,10 @@ static s32 ExecuteCommand(char * Command, string * String){
 			ErrorCode = 1;
 		}
 	}
-	if(String){
-		* String = StringAlloc(Output);
-	}
 	
+	if(ErrorCode){
+		printf("%s", Output);
+	}
 	PipeClose(Console);
 	return ErrorCode;
 }
@@ -710,33 +682,39 @@ static s32 ExecuteCommand(char * Command, string * String){
 
 static void FolderCreate(const char * Path){
 	string Command = StringFormat(STR(">nul 2>&1 pushd \"%\" &&(popd & >nul 2>&1 mkdir \"%\")|| >nul 2>&1 mkdir \"%\""), STR(Path),  STR(Path),  STR(Path));
-	ExecuteCommand(Command.Base, 0);
+	ExecuteCommand(Command.Base);
 	StringFree(&Command);
 }
+
+
+static void FileDelete(const char * Path){
+	string Command = StringFormat(STR("del /F /Q % > NUL"), STR(Path));
+	ExecuteCommand(Command.Base);
+	StringFree(&Command);
+}
+
 
 static void FileRename(const char * Path, const char * NewPath){
-	string Command = StringFormat(STR("mv \"%\" \"%\""), STR(Path),  STR(NewPath));
-	StringPrint(Command);
-	ExecuteCommand(Command.Base, 0);
+	string Command = StringFormat(STR("move \"%\" \"%\""), STR(Path),  STR(NewPath));
+	ExecuteCommand(Command.Base);
 	StringFree(&Command);
 }
-
 
 
 static void FilesCopyAll(const char * Source, const char * Destination){
 	string Command = StringFormat(STR("robocopy \"%\" \"%\""), STR(Source), STR(Destination));
-	ExecuteCommand(Command.Base, 0);
+	ExecuteCommand(Command.Base);
 	StringFree(&Command);
 }
 
 static void FilesCopyAllMatching(const char * Source, const char * Destination, const char * Pattern){
 	string Command = StringFormat(STR("xcopy /s/y \"%\\%\" \"%\""), STR(Source), STR(Pattern), STR(Destination));
-	ExecuteCommand(Command.Base, 0);
+	ExecuteCommand(Command.Base);
 	StringFree(&Command);
 }
 
-static void FileGLOB(string_list * List, const char* Pattern){
-	s32 InitialSize = List->Size;
+static void FileGLOB(string * List, const char* Pattern){
+	s32 InitialSize = ArraySize(List);
 	WIN32_FIND_DATA fd; 
 	HANDLE hFind = FindFirstFile(Pattern, &fd);
 	
@@ -750,11 +728,11 @@ static void FileGLOB(string_list * List, const char* Pattern){
 				string FileName = (PathSize) ? StringFormat(STR("%/%"),StringCreateWithSize(Pattern, PathSize - 1), STR(fd.cFileName)) : StringAlloc(fd.cFileName);
 				b32 ShouldAdd = true;
 				for(int i = 0; i < InitialSize; i++){
-					if(StringCompare(FileName, StringListAt(List, i))){
+					if(StringCompare(FileName, List[i])){
 						ShouldAdd = false;
 					}
 				}
-				if(ShouldAdd) StringListAppend(List, FileName);
+				if(ShouldAdd) ArrayAppend(&List, &FileName);
 			}
 			
 		}while(FindNextFile(hFind, &fd)); 
@@ -840,17 +818,17 @@ typedef struct{
 	const char * FilePath;
 	const char * OutputPath;
 	
-	string_list SourceFiles; //DONE
+	string * SourceFiles; //DONE
 	
-	string_list Libs; //DONE
-	string_list LibsDirs;  //DONE
+	string* Libs; //DONE
+	string* LibsDirs;  //DONE
 	
-	string_list IncludeDirs;
+	string* IncludeDirs;
 	
-	string_list CompilerFlags; //DONE
-	string_list LinkerFlags; //DONE
-	string_list Symbols;  //DONE
-	string_list Defines;  //DONE
+	string* CompilerFlags; //DONE
+	string* LinkerFlags; //DONE
+	string* Symbols;  //DONE
+	string* Defines;  //DONE
 	
 	u32 Compiler;
 	u32 Output;
@@ -865,33 +843,35 @@ typedef struct {
 }compilation_data;
 
 typedef struct{
-	string_list Literals;
+	string* Literals;
 }command_line_args;
 
 static command_line_args Arguments;
 
 static void ArgumentsLoad(s32 Argc, char * Argv[]){
 	for(int i = 1; i < Argc; i++){
-		StringListAppend(&Arguments.Literals, STR(Argv[i]) );
+		string Entry = STR(Argv[i]);
+		ArrayAppend(&Arguments.Literals, &Entry);
 	}
 }
 
+#define ARGUMENT_NOT_FOUND -1
+
 static s32 ArgumentsSearch(const char * Args){
-	string_list ArgsList;
-	ZeroMemory(ArgsList);
+	string* ArgsList = ArrayAlloc(string);
 	StringSplit(&ArgsList, STR(Args), ' ');
 	
 	s32 Result = -1;
 	
-	for(int i = 0; i < Arguments.Literals.Size; i++){
-		for(int j = 0; j < ArgsList.Size; j++){
-			if(StringCompare(Arguments.Literals.Base[i], ArgsList.Base[j])){
+	for(int i = 0; i < ArraySize(Arguments.Literals); i++){
+		for(int j = 0; j < ArraySize(ArgsList); j++){
+			if(StringCompare(Arguments.Literals[i], ArgsList[j])){
 				Result = j;
 			}
 		}
 	}
 	
-	StringListFree(&ArgsList);
+	ArrayFree(ArgsList);
 	return Result;
 }
 
@@ -904,6 +884,16 @@ static project ProjectCreate(const char * Name, u32 Compiler, u32 Output){
 	Project.OutputPath = ".";
 	Project.Compiler = Compiler;
 	Project.Output = Output;
+
+
+	Project.SourceFiles = ArrayAlloc(string);
+	Project.Libs = ArrayAlloc(string);
+	Project.LibsDirs = ArrayAlloc(string);
+	Project.IncludeDirs = ArrayAlloc(string);
+	Project.CompilerFlags = ArrayAlloc(string);
+	Project.LinkerFlags = ArrayAlloc(string);
+	Project.Symbols = ArrayAlloc(string); 
+	Project.Defines = ArrayAlloc(string);
 	
 	return Project;
 }
@@ -926,12 +916,11 @@ static inline  void ProjectSetOutputPath(project * Project, const char * Path){
 }
 
 static inline void ProjectAddFiles(project * Project, const char * Paths){
-	string_list Files;
-	ZeroMemory(Files);
+	string * Files = ArrayAlloc(string);
 	StringSemanticSplit(&Files, STR(Paths), ' ');
 	
-	for(int i = 0; i < Files.Size; i++){	
-		string Path = StringListAt(&Files, i);
+	for(int i = 0; i < ArraySize(Files); i++){	
+		string Path = Files[i];
 		b32 IsAPattern = false;
 		for(int j = 0; j < Path.Size; j++){
 			if(Path.Base[j] == '*'){
@@ -942,18 +931,20 @@ static inline void ProjectAddFiles(project * Project, const char * Paths){
 		string FullPath;
 		if(!IsAPattern){
 			FullPath = (Project->FilePath) ? StringFormat(STR("%/%"), STR(Project->FilePath), STR(Path.Base)) : StringAlloc(Path.Base);
-			StringListAppend(&Project->SourceFiles, FullPath);
+			ArrayAppend(&Project->SourceFiles, &FullPath);
 		}else{
 			FullPath = (Project->FilePath) ? StringFormat(STR("%/%"), STR(Project->FilePath), STR(Path.Base)) : StringAlloc(Path.Base);
-			FileGLOB(&Project->SourceFiles, FullPath.Base);		
+			FileGLOB(Project->SourceFiles, FullPath.Base);		
 			StringFree(&FullPath);
 		}
 	}
-	StringListFree(&Files);
+	ArrayFree(Files);
 }
 
 static inline void ProjectResetFiles(project * Project){
-	StringListFreeAll(&Project->SourceFiles);
+	for_each(String, Project->SourceFiles){
+		StringFree(&String);
+	}
 }
 
 static inline void ProjectAddCompilerFlags(project * Project, const char * Flags){
@@ -961,7 +952,9 @@ static inline void ProjectAddCompilerFlags(project * Project, const char * Flags
 }
 
 static inline void ProjectResetCompilerFlags(project * Project){
-	StringListFreeAll(&Project->CompilerFlags);
+	for_each(String, Project->CompilerFlags){
+		StringFree(&String);
+	}
 }
 
 static inline void ProjectAddLinkerFlags(project * Project, const char * Flags){
@@ -969,7 +962,9 @@ static inline void ProjectAddLinkerFlags(project * Project, const char * Flags){
 }
 
 static inline void ProjectResetLinkerFlags(project * Project){
-	StringListFreeAll(&Project->LinkerFlags);
+	for_each(String, Project->LinkerFlags){
+		StringFree(&String);
+	}
 }
 
 static inline void ProjectLinkLibs(project * Project, const char * Libs){
@@ -981,11 +976,15 @@ static inline void ProjectAddLibsDirs(project * Project, const char * Dirs){
 }
 
 static inline void ProjectResetLibsDirs(project * Project){
-	StringListFreeAll(&Project->LibsDirs);
+	for_each(String, Project->LibsDirs){
+		StringFree(&String);
+	}
 }
 
 static inline void ProjectResetLibs(project * Project){
-	StringListFreeAll(&Project->Libs);
+	for_each(String, Project->Libs){
+		StringFree(&String);
+	}
 }
 
 static inline void ProjectAddIncludeDirs(project * Project, const char * Dirs){
@@ -993,7 +992,9 @@ static inline void ProjectAddIncludeDirs(project * Project, const char * Dirs){
 }
 
 static inline void ProjectResetIncludeDirs(project * Project){
-	StringListFreeAll(&Project->IncludeDirs);
+	for_each(String, Project->IncludeDirs){
+		StringFree(&String);
+	}
 }
 
 static inline void ProjectAddDefines(project * Project, const char * Defines){
@@ -1001,7 +1002,9 @@ static inline void ProjectAddDefines(project * Project, const char * Defines){
 }
 
 static inline void ProjectResetDefines(project * Project){
-	StringListFreeAll(&Project->Defines);
+	for_each(String, Project->Defines){
+		StringFree(&String);
+	}
 }
 
 static inline void ProjectExportSymbols(project * Project, const char * Symbols){
@@ -1009,7 +1012,9 @@ static inline void ProjectExportSymbols(project * Project, const char * Symbols)
 }
 
 static inline void ProjectResetSymbols(project * Project){
-	StringListFreeAll(&Project->Symbols);
+	for_each(String, Project->Symbols){
+		StringFree(&String);
+	}
 }
 
 static inline void ProjectLink(project * LinkingProject, project * LinkedProject){
@@ -1080,36 +1085,36 @@ static string MSVCGenerateCompilationCommand(project * Project){
 	
 	string CompilerFlags = StringListJoin(&Project->CompilerFlags, ' ');
 	
-	string_list RawDefines = StringListCopy(&Project->Defines);
-	for(int i = 0; i < RawDefines.Size; i++){
-		RawDefines.Base[i] = StringFormat(STR("/D%"), Project->Defines.Base[i]);
+	string* RawDefines = ArrayCopy(Project->Defines);
+	for(int i = 0; i < ArraySize(RawDefines); i++){
+		RawDefines[i] = StringFormat(STR("/D%"), Project->Defines[i]);
 	}
 	string Defines = StringListJoin(&RawDefines, ' ');
-	StringListFreeAll(&RawDefines);
+	ArrayFree(RawDefines);
 	
-	string_list RawIncludeDirs = StringListCopy(&Project->IncludeDirs);
-	for(int i = 0; i < RawIncludeDirs.Size; i++){
-		RawIncludeDirs.Base[i] = StringFormat(STR("/external:I%"), Project->IncludeDirs.Base[i]);
+	string* RawIncludeDirs = ArrayCopy(Project->IncludeDirs);
+	for(int i = 0; i < ArraySize(RawIncludeDirs); i++){
+		RawIncludeDirs[i] = StringFormat(STR("/external:I%"), Project->IncludeDirs[i]);
 	}
 	string IncludeDirs = StringListJoin(&RawIncludeDirs, ' ');
-	StringListFreeAll(&RawIncludeDirs);
+	ArrayFree(RawIncludeDirs);
 	
 	string Libs = StringListJoin(&Project->Libs, ' ');
 	string LinkerFlags = StringListJoin(&Project->LinkerFlags, ' ');
 	
-	string_list RawSymbols = StringListCopy(&Project->Symbols);
-	for(int i = 0; i < RawSymbols.Size; i++){
-		RawSymbols.Base[i] = StringFormat(STR("/EXPORT:%"), Project->Symbols.Base[i]);
+	string* RawSymbols = ArrayCopy(Project->Symbols);
+	for(int i = 0; i < ArraySize(RawSymbols); i++){
+		RawSymbols[i] = StringFormat(STR("/EXPORT:%"), Project->Symbols[i]);
 	}
 	string Symbols = StringListJoin(&RawSymbols, ' ');
-	StringListFreeAll(&RawSymbols);
+	ArrayFree(RawSymbols);
 	
-	string_list RawLibsDirs = StringListCopy(&Project->LibsDirs);
-	for(int i = 0; i < RawLibsDirs.Size; i++){
-		RawLibsDirs.Base[i] = StringFormat(STR("/LIBPATH:%"), Project->LibsDirs.Base[i]);
+	string* RawLibsDirs = ArrayCopy(Project->LibsDirs);
+	for(int i = 0; i < ArraySize(RawLibsDirs); i++){
+		RawLibsDirs[i] = StringFormat(STR("/LIBPATH:%"), Project->LibsDirs[i]);
 	}
 	string LibsDirs = StringListJoin(&RawLibsDirs, ' ');
-	StringListFreeAll(&RawLibsDirs);
+	ArrayFree(RawLibsDirs);
 	
 	string CompilationCommand;
 	
@@ -1139,28 +1144,37 @@ static string MSVCGenerateLinkCommand(project * Project){
 	string Libs = StringListJoin(&Project->Libs, ' ');
 	string LinkerFlags = StringListJoin(&Project->LinkerFlags, ' ');
 	
-	string_list RawSymbols = StringListCopy(&Project->Symbols);
-	for(int i = 0; i < RawSymbols.Size; i++){
-		RawSymbols.Base[i] = StringFormat(STR("/EXPORT:%"), Project->Symbols.Base[i]);
+	string* RawSymbols = ArrayCopy(Project->Symbols);
+	for(int i = 0; i < ArraySize(RawSymbols); i++){
+		RawSymbols[i] = StringFormat(STR("/EXPORT:%"), Project->Symbols[i]);
 	}
 	string Symbols = StringListJoin(&RawSymbols, ' ');
-	StringListFreeAll(&RawSymbols);
+	for_each(String, RawSymbols){
+		StringFree(&String);
+	}
+	ArrayFree(RawSymbols);
 	
-	string_list RawLibsDirs = StringListCopy(&Project->LibsDirs);
-	for(int i = 0; i < RawLibsDirs.Size; i++){
-		RawLibsDirs.Base[i] = StringFormat(STR("/D%"), Project->LibsDirs.Base[i]);
+	string* RawLibsDirs = ArrayCopy(Project->LibsDirs);
+	for(int i = 0; i < ArraySize(RawLibsDirs); i++){
+		RawLibsDirs[i] = StringFormat(STR("/D%"), Project->LibsDirs[i]);
 	}
 	string LibsDirs = StringListJoin(&RawLibsDirs, ' ');
-	StringListFreeAll(&RawLibsDirs);
+	for_each(String, RawLibsDirs){
+		StringFree(&String);
+	}
+	ArrayFree(RawLibsDirs);
 	
-	string TsPattern = StringFormat(STR("%/%/*.obj"), STR(Project->OutputPath), STR(Project->Name));
-	string_list RawTranslationUnits;
-	ZeroMemory(RawTranslationUnits);
-	FileGLOB(&RawTranslationUnits, TsPattern.Base);
+	
+ 	string TsPattern = StringFormat(STR("%/%/*.obj"), STR(Project->OutputPath), STR(Project->Name));
+	string * RawTranslationUnits = ArrayAlloc(string);
+	FileGLOB(RawTranslationUnits, TsPattern.Base);
 	StringFree(&TsPattern);
-	string TranslationUnits = StringListJoin(&RawTranslationUnits, ' ');
-	StringListFreeAll(&RawTranslationUnits);
-
+	string TranslationUnits = StringListJoin(&RawTranslationUnits, ' '); 
+	for_each(String, RawLibsDirs){
+		StringFree(&String);
+	}
+	ArrayFree(RawLibsDirs);
+ 	
 	string LinkCommand = StringFormat(STR("lib % % % % % /OUT:\"%/%/%.lib\""), TranslationUnits, LinkerFlags, LibsDirs, Libs, Symbols, STR(Project->OutputPath),  STR(Project->Name), STR(Project->Name));
 	
 	StringFree(&Libs);
@@ -1174,26 +1188,24 @@ static string MSVCGenerateLinkCommand(project * Project){
 static void Compile(compilation_data Data){
 	project * Project = Data.Project;
 	string Command = MSVCGenerateCompilationCommand(Project);
-	string Output;
-
+	
 #if !QUIET_MODE	
 	string StartTime = TimeGetCurrent();
 	StringPrintf(STR("\nCompilation of % started at %"), STR(Project->Name), StartTime);
 	StringFree(&StartTime);
 
-	StringPrintf(STR("\n%\n"), Command);
+	Printf(STR("\n%\n"), Command);
 	u64 Ticks = QueryPerformanceGetCounter();
 #endif
-
-	s32 ErrorCode = ExecuteCommand(Command.Base, &Output);
-
-	if(ErrorCode) StringPrintsl(Output);
+	//printf("Command: %s\n", Command.Base);
+	s32 ErrorCode = ExecuteCommand(Command.Base);
+	*Data.ErrorCode |= ErrorCode;
+	
 #if !QUIET_MODE
 	Ticks = QueryPerformanceGetCounter() - Ticks;
 	string EndTime = TimeGetCurrent();
 	
 	f64 Seconds = (f64)Ticks / QueryPerfonceGetFreq();
-	
 	
 	string Result = (ErrorCode) ? STR("exited") : STR("finished");
 	string Ms = F64ToString(Seconds * 1000, 3);
@@ -1203,18 +1215,13 @@ static void Compile(compilation_data Data){
 	StringFree(&Ms);
 	StringFree(&Sc);
 #endif
-	*Data.ErrorCode |= ErrorCode;
+	
 	
 	if(Project->Output == OUTPUT_LIBRARY){
 		string LinkCommand = MSVCGenerateLinkCommand(Project);
-		//StringPrintf(LinkCommand);
-		string LinkOutput;
-		ErrorCode = ExecuteCommand(LinkCommand.Base, &LinkOutput);
+		ErrorCode = ExecuteCommand(LinkCommand.Base);
 		*Data.ErrorCode |= ErrorCode;
-		if(ErrorCode) StringPrintsl(LinkOutput);
 	} 
-	
-	StringFree(&Output);
 	
 	if(Data.MultiThreaded){
 		MemFree(Project);
@@ -1249,13 +1256,431 @@ static inline s32 ProjectCompileAndWait(project * Project){
 	return ErrorCode;
 }
 
+void MakeCRecompile(char * ExeName){
+	char * cPath = __FILE__;
+	int i = 0;	for(i = strlen(cPath); i > 0 && cPath[i] != '\\'; i--){}
+	string Path = StringAllocSubstr(cPath, i);
+	string StrPath = StringFormat(STR("%\\build.exe.old"), Path);
+	FileDelete(StrPath.Base);
+	FileRename(ExeName, StrPath.Base);
+	string Command = StringFormat(STR("cl /nologo /std:c++20 /O2 /EHsc /cgthreads8 %/build.c /link /OUT:%"), Path, STR(ExeName));
+	if(ExecuteCommand(Command.Base)){
+		FileRename(StrPath.Base, ExeName);
+	}
+	StringFree(&Command);
+		
+	for(i = strlen(ExeName); i > 0 && ExeName[i] != '.'; i--){}
+	string Name = StringAllocSubstr(ExeName, i);
+	string Obj = StringFormat(STR("%.obj"), Name);
+		
+	FileDelete(Obj.Base);
+	StringFree(&Name);
+	StringFree(&Obj);
+	StringFree(&Path);
+	StringFree(&StrPath);
+}
+
+typedef enum{
+    TOKEN_TYPE_INVALID,
+
+    TOKEN_TYPE_COLON,
+	
+    TOKEN_TYPE_KEYWORD,
+    TOKEN_TYPE_IDENTIFIER,
+	TOKEN_TYPE_STRING_LITERAL,
+	TOKEN_TYPE_INLINE_COMMENT,
+	
+    TOKEN_TYPE_COUNT,
+} token_type;
+
+typedef struct{
+    char * Literal;
+    u32 Enum;
+} keyword;
+
+typedef struct {
+    u32 Enum;
+    
+    union{
+		string Literal;
+        keyword Keyword;
+    };
+
+} token;
+
+typedef enum{
+    KEYWORD_TYPE_INVALID,
+
+	KEYWORD_TYPE_PROJECT, 
+    KEYWORD_TYPE_COMPILER, 
+    KEYWORD_TYPE_PATH, 
+    KEYWORD_TYPE_VERSION, 
+    KEYWORD_TYPE_OUT, 
+    KEYWORD_TYPE_KIND, 
+    KEYWORD_TYPE_FILES, 
+    KEYWORD_TYPE_LIBS, 
+    KEYWORD_TYPE_LIB_DIRECTORIES, 
+    KEYWORD_TYPE_INCLUDE, 
+    KEYWORD_TYPE_FLAGS, 
+    KEYWORD_TYPE_LINK, 
+    KEYWORD_TYPE_EXPORT, 
+    KEYWORD_TYPE_DEFINE,
+	
+    KEYWORD_TYPE_MSVC,
+	
+    KEYWORD_TYPE_EXE, 
+    KEYWORD_TYPE_LIB, 
+    KEYWORD_TYPE_DLL, 
+	
+    KEYWORD_TYPE_TYPE_COUNT,
+} keyword_type;
+
+keyword Keywords[] = {
+	{"project", KEYWORD_TYPE_PROJECT }, 
+    {"compiler", KEYWORD_TYPE_COMPILER }, 
+    {"path", KEYWORD_TYPE_PATH  },
+    {"version", KEYWORD_TYPE_VERSION  },
+    {"out", KEYWORD_TYPE_OUT  },
+    {"kind", KEYWORD_TYPE_KIND  },
+    {"files", KEYWORD_TYPE_FILES  },
+    {"libs", KEYWORD_TYPE_LIBS  },
+    {"lib_directories", KEYWORD_TYPE_LIB_DIRECTORIES }, 
+    {"include", KEYWORD_TYPE_INCLUDE  },
+    {"flags", KEYWORD_TYPE_FLAGS  },
+    {"link", KEYWORD_TYPE_LINK  },
+    {"export", KEYWORD_TYPE_EXPORT  },
+    {"define", KEYWORD_TYPE_DEFINE 	 },
+	
+    {"exe", KEYWORD_TYPE_EXE 	 },
+    {"lib", KEYWORD_TYPE_LIB 	 },
+    {"dll", KEYWORD_TYPE_DLL 	 },
+	
+    {"msvc", KEYWORD_TYPE_MSVC},
+};
+
+typedef struct{
+    char * Literal;
+    u32 Enum;
+} symbol;
+
+symbol Symbols[] = {
+    {":", TOKEN_TYPE_COLON},
+    {"\"", TOKEN_TYPE_STRING_LITERAL},
+    {"//", TOKEN_TYPE_INLINE_COMMENT},
+};
+
+typedef struct{
+	u32 IsComment;
+	b32 IsString;
+} parser_state;
+
+#define CaseEnumToString(Enum) case Enum: return #Enum
+
+char * TokenTypeToString(u32 Enum){
+    switch(Enum){
+        CaseEnumToString(TOKEN_TYPE_INVALID);
+        
+        CaseEnumToString(TOKEN_TYPE_COLON);
+        CaseEnumToString(TOKEN_TYPE_KEYWORD);
+        CaseEnumToString(TOKEN_TYPE_IDENTIFIER);
+        CaseEnumToString(TOKEN_TYPE_INLINE_COMMENT);
+        CaseEnumToString(TOKEN_TYPE_STRING_LITERAL);
+        //CaseEnumToString(TOKEN_TYPE_);
+        default: return 0;
+    }
+}
+
+static void TokenPrint(token Token){
+    printf("%s", TokenTypeToString(Token.Enum));
+    switch(Token.Enum){
+        case TOKEN_TYPE_KEYWORD:{
+            printf(": %s", Token.Keyword.Literal);
+        }break;
+		case TOKEN_TYPE_STRING_LITERAL:{
+            Printf(STR(": %"), Token.Literal);
+        }break;
+        case TOKEN_TYPE_IDENTIFIER:{
+            printf(": %s", Token.Literal.Base);
+        }break;
+    }
+	printf("\n");
+}
+
+token ParserExpectNext(token **Tokens, s32 * Offset, u32 Enum, b32 * Result){
+	token Token;
+	ZeroMemory(Token);
+	if(*Offset + 1 <= ArraySize(*Tokens)){
+		Token = (*Tokens)[(*Offset)++];
+	}
+
+	if(Result && Token.Enum != Enum){
+		*Result = false;
+	}
+
+	return Token;
+}
+
+token ParserFetchNext(token **Tokens, s32 * Offset){
+	token Token;
+	ZeroMemory(Token);
+	if(*Offset + 1 <= ArraySize(*Tokens)){
+		Token = (*Tokens)[(*Offset)++];
+	}
+
+	return Token;
+}
+
+project TokenParseIntoProject(token** Tokens, char * FilePath){
+	project Project;
+	ZeroMemory(Project);
+
+	Project.SourceFiles = ArrayAlloc(string);
+	Project.Libs = ArrayAlloc(string);
+	Project.LibsDirs = ArrayAlloc(string);
+	Project.IncludeDirs = ArrayAlloc(string);
+	Project.CompilerFlags = ArrayAlloc(string);
+	Project.LinkerFlags = ArrayAlloc(string);
+	Project.Symbols = ArrayAlloc(string); 
+	Project.Defines = ArrayAlloc(string);
+
+	for(int Offset = 0; Offset < ArraySize(*Tokens);){
+		b32 Result = true;
+		token KeywordToken = ParserExpectNext(Tokens, &Offset, TOKEN_TYPE_KEYWORD, &Result);
+		ParserExpectNext(Tokens, &Offset, TOKEN_TYPE_COLON, &Result);
+		if(KeywordToken.Keyword.Enum == KEYWORD_TYPE_COMPILER){
+			token Value = ParserExpectNext(Tokens, &Offset, TOKEN_TYPE_KEYWORD, &Result);
+			switch(Value.Keyword.Enum){
+				case KEYWORD_TYPE_MSVC:{
+					Project.Compiler = COMPILER_MSVC;
+				}break;
+				default:{
+					Result = false;
+				}break;
+			}
+		}else if(KeywordToken.Keyword.Enum == KEYWORD_TYPE_KIND){
+			token Value = ParserExpectNext(Tokens, &Offset, TOKEN_TYPE_KEYWORD, &Result);
+			switch(Value.Keyword.Enum){
+				case KEYWORD_TYPE_EXE:{
+					Project.Output = OUTPUT_EXECUTABLE;
+				}break;
+				case KEYWORD_TYPE_LIB:{
+					Project.Output = OUTPUT_LIBRARY;
+				}break;
+				case KEYWORD_TYPE_DLL:{
+					Project.Output = OUTPUT_DYNAMIC_LIBRARY;
+				}break;
+				default:{
+					Result = false;
+				}break;
+			}
+		}else{
+			token Value = ParserFetchNext(Tokens, &Offset);
+			if(Value.Enum != TOKEN_TYPE_IDENTIFIER || Value.Enum != TOKEN_TYPE_STRING_LITERAL && Result){
+				switch(KeywordToken.Keyword.Enum){
+					case KEYWORD_TYPE_PROJECT:{
+						Project.Name = CStringAlloc(Value.Literal.Base);
+					}break;
+					case KEYWORD_TYPE_PATH:{
+						Project.FilePath = CStringAlloc(Value.Literal.Base);
+					}break;
+					case KEYWORD_TYPE_VERSION:{
+						//WIP
+					}break;
+					case KEYWORD_TYPE_OUT:{
+						Project.OutputPath = CStringAlloc(Value.Literal.Base);
+					}break;
+					case KEYWORD_TYPE_FILES:{
+						ProjectAddFiles(&Project, Value.Literal.Base);
+					}break;
+					case KEYWORD_TYPE_LIBS:{
+						ProjectLinkLibs(&Project, Value.Literal.Base);
+					}break;
+					case KEYWORD_TYPE_LIB_DIRECTORIES:{
+						ProjectAddLibsDirs(&Project, Value.Literal.Base);
+					}break;
+					case KEYWORD_TYPE_INCLUDE:{
+						ProjectAddIncludeDirs(&Project, Value.Literal.Base);
+					}break;				
+					case KEYWORD_TYPE_FLAGS:{
+						ProjectAddCompilerFlags(&Project, Value.Literal.Base);
+					}break;
+					case KEYWORD_TYPE_LINK:{
+						ProjectAddLinkerFlags(&Project, Value.Literal.Base);
+					}break;
+					case KEYWORD_TYPE_EXPORT:{
+						ProjectExportSymbols(&Project, Value.Literal.Base);
+					}break;
+					case KEYWORD_TYPE_DEFINE:{
+						ProjectAddDefines(&Project, Value.Literal.Base);
+					}break;
+				}
+ 			}else{
+				Result = false;
+			} 
+		}
+		
+		if(!Result){
+			printf("Unexpected symbol while parsing %s\n", FilePath);
+			break;
+		}
+	}
+	return Project;
+}
+
+const s32 SymbolCount = sizeof(Symbols) / sizeof(Symbols[0]);
+const s32 KeyWordCount = sizeof(Keywords) / sizeof(Keywords[0]);
+
+token TokenizerExtractSymbolToken(char ** Data){
+    token Token;
+    ZeroMemory(Token);
+    s32 CandidateSize = 0;
+    for(int i = 0; i < SymbolCount; i++){
+        s32 Len = strlen(Symbols[i].Literal);
+        if(CStringCompareN(*Data, Symbols[i].Literal, Len) && Len > CandidateSize){
+            Token.Enum = Symbols[i].Enum;
+            CandidateSize = Len;
+        }
+    }
+    
+    (*Data) += CandidateSize;
+    return Token;
+}
+
+token TokenizerExtractToken(char * Literal, s32 Lenght){
+    token Token;
+    ZeroMemory(Token);
+
+    for(int i = 0; i < KeyWordCount; i++){
+        if(CStringCompare(Literal, Keywords[i].Literal)){
+            Token.Enum = TOKEN_TYPE_KEYWORD;
+            Token.Keyword = Keywords[i];
+            return Token;
+        }
+    }
+        
+    Token.Enum = TOKEN_TYPE_IDENTIFIER;
+    Token.Literal = STR(Literal);
+    return Token;
+}
+
+void TokenizerAdvanceTillValidChar(char ** Data){
+    while(true){
+        if((*Data)[0] == ' ' ||
+           (*Data)[0] == '\n' ||
+           (*Data)[0] == '\r' ||
+           (*Data)[0] == 9)
+        {
+            (*Data)++;
+
+            continue;
+        }
+        break;
+    }
+}
+
+static token * Tokenize(char * Path, char * Data){
+	token* Tokens = ArrayAlloc(token);
+       
+    token Token;
+    while(Data[0]){
+        TokenizerAdvanceTillValidChar(&Data);
+        ZeroMemory(Token);
+        
+		s32 Size = 0;
+        Token = TokenizerExtractSymbolToken(&Data);
+        if(Token.Enum != TOKEN_TYPE_INVALID){
+			switch(Token.Enum){
+				case TOKEN_TYPE_STRING_LITERAL:{
+					while(Data[++Size] != '"' && Data[Size] != 0){}
+					char * Literal = MemAlloc(Size + 1);
+					MemCopy(Literal, Data, Size);
+					Data += Size + 2;
+					Token.Literal = STR(Literal);
+					ArrayAppend(&Tokens, &Token);
+					continue;
+				}break;
+				case TOKEN_TYPE_INLINE_COMMENT:{
+					while(Data[++Size] != '\n' && Data[Size] != 0){}
+					Data += Size;
+					continue;
+				}break;
+				default:{
+					ArrayAppend(&Tokens, &Token);
+					continue;
+				}break; 
+			}
+		}
+        
+		while(true){
+			if(Data[Size] != ' ' &&
+			   Data[Size] != '\n' &&
+			   Data[Size] != '\r' &&
+			   Data[Size] != 9 &&
+			   (CharacterIsValid(Data[Size])))
+			{
+				Size++;
+				continue;
+			}
+			break;
+		}
+        
+		if(Size){
+			char * Literal = MemAlloc(Size + 1);
+			MemCopy(Literal, Data, Size);
+			Data += Size;
+			Token = TokenizerExtractToken(Literal, Size);
+		}
+		if(Token.Enum != TOKEN_TYPE_INVALID){
+			ArrayAppend(&Tokens, &Token);
+		}else{
+			printf("Unexpected token %c encoutured while lexing file: %s\n", Data[0], Path);
+			Data++;
+			continue;
+		}
+	}
+	return Tokens;
+}
+
+static project ProjectCreateFromFile(char * FilePath){
+	FILE * FileHandle = fopen(FilePath, "rb");
+	fseek(FileHandle, 0, SEEK_END);
+    u64 FileSize = ftell(FileHandle);
+    fseek(FileHandle, 0, SEEK_SET);
+	char *Text = MemAlloc(FileSize + 1);
+    fread(Text, FileSize, 1, FileHandle);
+    Text[FileSize] = 0;
+    fclose(FileHandle);
+	
+	token * Tokens = Tokenize(FilePath, Text);
+#if 0
+	for_each(Token, Tokens){
+		TokenPrint(Token);
+	}
+#endif
+	
+	project Project = TokenParseIntoProject(&Tokens, FilePath);
+	
+	ArrayFree(Tokens);
+	MemFree(Text);
+	
+	return Project;
+}
+
 #ifdef ENTRY_POINT
 
 s32 ENTRY_POINT();
 
+#define VALUE(string) #string
+#define TO_LITERAL(string) VALUE(string)
+
 int main(s32 Argc, char * Argv[]){
+	Arguments.Literals = ArrayAlloc(string);
 	ArgumentsLoad(Argc, Argv);
-	return ENTRY_POINT();
+	s32 Result = ENTRY_POINT();
+	if(ArgumentsSearch("--no_recompile") == ARGUMENT_NOT_FOUND){
+		MakeCRecompile(Argv[0]);
+	}
+	return Result;
 }
 #endif
 
