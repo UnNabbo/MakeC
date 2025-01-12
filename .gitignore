@@ -5,3 +5,5 @@ out/
 *.obj
 *.ilk
 *.pdb
+
+makec.h
