@@ -60,7 +60,6 @@ inline string StringCreateWithSize(const char * Text, s32 Size){
 inline string StringAlloc(char * Text){
 	string String;
 	String.Size = CStringLenght(Text);
-	printf("L: %i", String.Size);
 	String.Base = MemAlloc(String.Size + 1);
 	MemCopy(String.Base, Text, String.Size);
 	return String;
@@ -93,6 +92,19 @@ static b32 StringCompare(string Str1, string Str2){
 		return false;	
 	}
 	for(int i = 0; i < Str1.Size; i++){
+		if(Str1.Base[i] != Str2.Base[i]){
+			return false;
+		}
+	}
+	return true;
+}
+
+
+static b32 StringCompareN(string Str1, string Str2, s32 N){
+	if(Str1.Size < N || Str2.Size < N){
+		return false;	
+	}
+	for(int i = 0; i < N; i++){
 		if(Str1.Base[i] != Str2.Base[i]){
 			return false;
 		}

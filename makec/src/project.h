@@ -14,10 +14,10 @@ enum output{
 };
 
 typedef struct{
-	const char * Name;
+	char * Name;
 	
-	const char * FilePath;
-	const char * OutputPath;
+	char * FilePath;
+	char * OutputPath;
 	
 	string * SourceFiles; //DONE
 	
@@ -30,6 +30,7 @@ typedef struct{
 	string* LinkerFlags; //DONE
 	string* Symbols;  //DONE
 	string* Defines;  //DONE
+	string* Dependency;  //DONE
 	
 	u32 Compiler;
 	u32 Output;
@@ -43,26 +44,26 @@ typedef struct {
 	b32 MultiThreaded;
 }compilation_data;
 
-project ProjectCreate(const char * Name, u32 Compiler, u32 Output);
+project ProjectCreate(char * Name, u32 Compiler, u32 Output);
 void ProjectSetCompiler(project * Project, u32 Compiler);
 void ProjectSetOutputType(project * Project, u32 Output);
-void ProjectSetFilePath(project * Project, const char * Path);
-void ProjectSetOutputPath(project * Project, const char * Path);
-void ProjectAddFiles(project * Project, const char * Files);
+void ProjectSetFilePath(project * Project, char * Path);
+void ProjectSetOutputPath(project * Project, char * Path);
+void ProjectAddFiles(project * Project, char * Files);
 void ProjectResetFiles(project * Project);
-void ProjectAddCompilerFlags(project * Project, const char * Flags);
+void ProjectAddCompilerFlags(project * Project, char * Flags);
 void ProjectResetCompilerFlags(project * Project);
-void ProjectAddLinkerFlags(project * Project, const char * Flags);
+void ProjectAddLinkerFlags(project * Project, char * Flags);
 void ProjectResetLinkerFlags(project * Project);
-void ProjectLinkLibs(project * Project, const char * Libs);
-void ProjectAddLibsDirs(project * Project, const char * Dirs);
+void ProjectLinkLibs(project * Project, char * Libs);
+void ProjectAddLibsDirs(project * Project, char * Dirs);
 void ProjectResetLibsDirs(project * Project);
 void ProjectResetLibs(project * Project);
-void ProjectAddIncludeDirs(project * Project, const char * Dirs);
+void ProjectAddIncludeDirs(project * Project, char * Dirs);
 void ProjectResetIncludeDirs(project * Project);
-void ProjectAddDefines(project * Project, const char * Defines);
+void ProjectAddDefines(project * Project, char * Defines);
 void ProjectResetDefines(project * Project);
-void ProjectExportSymbols(project * Project, const char * Symbols);
+void ProjectExportSymbols(project * Project, char * Symbols);
 void ProjectResetSymbols(project * Project);
 void ProjectLink(project * LinkingProject, project * LinkedProject);
 void ProjectWait(project * Project);
@@ -70,5 +71,5 @@ void ProjectLaunch(project * Project);
 b32 ProjectIsRunning(project * Project);
 void ProjectCompile(project * Project, s32 * ErrorCode);
 s32 ProjectCompileAndWait(project * Project);
-project ProjectCreateFromFile(char * FilePath);                
+project * ProjectCreateFromFile(char * FilePath);                
  

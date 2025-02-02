@@ -57,5 +57,5 @@ static void * _ArrayCopyInternal(u8 ** Base){
 #define ArrayAppend(Array, Data) _ArrayAppendInternal((u8**)Array, Data)
 
 #define for_each(Var, Array)\
-for(int Var##Index = 0, _=1;_;_=0) \
+for(int Var##Index = 0, _=1;_ && Array;_=0) \
 for(__typeof__((Array[0])) Var = (Array[0]); Var##Index < ArraySize(Array); Var = Array[++Var##Index])

@@ -7,3 +7,4 @@ out/
 *.pdb
 
 makec.h
+merge_file_sync.bat

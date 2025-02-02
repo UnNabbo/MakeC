@@ -1,4 +1,4 @@
-static project ProjectCreate(const char * Name, u32 Compiler, u32 Output){
+static project ProjectCreate(char * Name, u32 Compiler, u32 Output){
 	project Project;
 	ZeroMemory(Project);
 	
@@ -17,6 +17,7 @@ static project ProjectCreate(const char * Name, u32 Compiler, u32 Output){
 	Project.LinkerFlags = ArrayAlloc(string);
 	Project.Symbols = ArrayAlloc(string); 
 	Project.Defines = ArrayAlloc(string);
+	Project.Dependency = ArrayAlloc(string);
 	
 	return Project;
 }
@@ -29,16 +30,16 @@ static inline void ProjectSetOutputType(project * Project, u32 Output){
 	Project->Output = Output;
 }
 
-static inline void ProjectSetFilePath(project * Project, const char * Path){
+static inline void ProjectSetFilePath(project * Project, char * Path){
 	Project->FilePath = Path;
 }
 
-static inline  void ProjectSetOutputPath(project * Project, const char * Path){
+static inline  void ProjectSetOutputPath(project * Project, char * Path){
 	FolderCreate(Path);
 	Project->OutputPath = Path;
 }
 
-static inline void ProjectAddFiles(project * Project, const char * Paths){
+static inline void ProjectAddFiles(project * Project, char * Paths){
 	string * Files = ArrayAlloc(string);
 	StringSemanticSplit(&Files, STR(Paths), ' ');
 	
@@ -57,7 +58,7 @@ static inline void ProjectAddFiles(project * Project, const char * Paths){
 			ArrayAppend(&Project->SourceFiles, &FullPath);
 		}else{
 			FullPath = (Project->FilePath) ? StringFormat(STR("%/%"), STR(Project->FilePath), STR(Path.Base)) : StringAlloc(Path.Base);
-			FileGLOB(Project->SourceFiles, FullPath.Base);		
+			FileGLOB(&Project->SourceFiles, FullPath.Base);		
 			StringFree(&FullPath);
 		}
 	}
@@ -70,7 +71,7 @@ static inline void ProjectResetFiles(project * Project){
 	}
 }
 
-static inline void ProjectAddCompilerFlags(project * Project, const char * Flags){
+static inline void ProjectAddCompilerFlags(project * Project, char * Flags){
 	StringSemanticSplitAlloc(&Project->CompilerFlags, StringCreate(Flags), ' ');
 }
 
@@ -80,7 +81,17 @@ static inline void ProjectResetCompilerFlags(project * Project){
 	}
 }
 
-static inline void ProjectAddLinkerFlags(project * Project, const char * Flags){
+static inline void ProjectAddDependency(project * Project, char * Projects){
+	StringSemanticSplitAlloc(&Project->Dependency, StringCreate(Projects), ' ');
+}
+
+static inline void ProjectResetDependency(project * Project){
+	for_each(String, Project->Dependency){
+		StringFree(&String);
+	}
+}
+
+static inline void ProjectAddLinkerFlags(project * Project, char * Flags){
 	StringSemanticSplitAlloc(&Project->LinkerFlags, StringCreate(Flags), ' ');
 }
 
@@ -90,11 +101,11 @@ static inline void ProjectResetLinkerFlags(project * Project){
 	}
 }
 
-static inline void ProjectLinkLibs(project * Project, const char * Libs){
+static inline void ProjectLinkLibs(project * Project,  char * Libs){
 	StringSemanticSplitAlloc(&Project->Libs, StringCreate(Libs), ' ');
 }
 
-static inline void ProjectAddLibsDirs(project * Project, const char * Dirs){
+static inline void ProjectAddLibsDirs(project * Project, char * Dirs){
 	StringSemanticSplitAlloc(&Project->LibsDirs, StringCreate(Dirs), ' ');
 }
 
@@ -110,7 +121,7 @@ static inline void ProjectResetLibs(project * Project){
 	}
 }
 
-static inline void ProjectAddIncludeDirs(project * Project, const char * Dirs){
+static inline void ProjectAddIncludeDirs(project * Project, char * Dirs){
 	StringSemanticSplitAlloc(&Project->IncludeDirs, StringCreate(Dirs), ' ');
 }
 
@@ -120,7 +131,7 @@ static inline void ProjectResetIncludeDirs(project * Project){
 	}
 }
 
-static inline void ProjectAddDefines(project * Project, const char * Defines){
+static inline void ProjectAddDefines(project * Project, char * Defines){
 	StringSemanticSplitAlloc(&Project->Defines, StringCreate(Defines), ' ');
 }
 
@@ -130,7 +141,7 @@ static inline void ProjectResetDefines(project * Project){
 	}
 }
 
-static inline void ProjectExportSymbols(project * Project, const char * Symbols){
+static inline void ProjectExportSymbols(project * Project, char * Symbols){
 	StringSemanticSplitAlloc(&Project->Symbols, StringCreate(Symbols), ' ');
 }
 
@@ -158,6 +169,17 @@ static inline void ProjectLaunch(project * Project){
 		Command = StringFormat(STR("cd %/%/ & start %.exe"), STR(Project->OutputPath), STR(Project->Name), STR(Project->Name));
 	}else{
 		Command = StringFormat(STR("cd %/ start %.exe"), STR(Project->Name), STR(Project->Name));
+	}
+	system(Command.Base);
+	StringFree(&Command);
+}
+
+static inline void ProjectLaunchWithArgs(project * Project, char * Args){
+	string Command;
+	if(Project->OutputPath){
+		Command = StringFormat(STR("cd %/%/ & start %.exe %"), STR(Project->OutputPath), STR(Project->Name), STR(Project->Name), STR(Args));
+	}else{
+		Command = StringFormat(STR("cd %/ start %.exe %"), STR(Project->Name), STR(Project->Name), STR(Args));
 	}
 	system(Command.Base);
 	StringFree(&Command);
@@ -207,28 +229,19 @@ static inline s32 ProjectCompileAndWait(project * Project){
 	return ErrorCode;
 }
 
-
-static project ProjectCreateFromFile(char * FilePath){
-	FILE * FileHandle = fopen(FilePath, "rb");
-	fseek(FileHandle, 0, SEEK_END);
-    u64 FileSize = ftell(FileHandle);
-    fseek(FileHandle, 0, SEEK_SET);
-	char *Text = MemAlloc(FileSize + 1);
-    fread(Text, FileSize, 1, FileHandle);
-    Text[FileSize] = 0;
-    fclose(FileHandle);
+static project * ProjectCreateFromFile(char * FilePath){
+	token * Tokens = Tokenize(FilePath);
 	
-	token * Tokens = Tokenize(FilePath, Text);
 #if 0
 	for_each(Token, Tokens){
 		TokenPrint(Token);
 	}
 #endif
 	
-	project Project = TokenParseIntoProject(&Tokens, FilePath);
+	project *Project = TokenParseIntoProject(&Tokens);
 	
 	ArrayFree(Tokens);
-	MemFree(Text);
+
 	
 	return Project;
 }

@@ -58,7 +58,3 @@ static void Printf(string Format, ...){
 	
 	StringFree(&Formatted);
 }
-
-static b32 CharacterIsValid(char Char){
-	return ( Char >= 'a' && Char <= 'z') || (Char >= 'A' && Char <= 'Z' || (Char >= '0' && Char <= '9') || Char == '/' || Char == '-' || Char == '_' || Char == '.');
-}

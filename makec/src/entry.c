@@ -6,7 +6,7 @@ void MakeCRecompile(char * ExeName){
 	string StrPath = StringFormat(STR("%\\build.exe.old"), Path);
 	FileDelete(StrPath.Base);
 	FileRename(ExeName, StrPath.Base);
-	string Command = StringFormat(STR("cl /nologo /std:c++20 /O2 /EHsc /cgthreads8 %/build.c /link /OUT:%"), Path, STR(ExeName));
+	string Command = StringFormat(STR("cl /nologo /std:c++20 /O2 /EHsc /cgthreads8 \"%/build.c\" /link /OUT:\"%\""), Path, STR(ExeName));
 	if(ExecuteCommand(Command.Base)){
 		FileRename(StrPath.Base, ExeName);
 	}

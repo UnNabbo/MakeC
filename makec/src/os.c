@@ -76,8 +76,8 @@ static void FilesCopyAllMatching(const char * Source, const char * Destination, 
 	StringFree(&Command);
 }
 
-static void FileGLOB(string * List, const char* Pattern){
-	s32 InitialSize = ArraySize(List);
+static void FileGLOB(string ** List, const char* Pattern){
+	s32 InitialSize = ArraySize(*List);
 	WIN32_FIND_DATA fd; 
 	HANDLE hFind = FindFirstFile(Pattern, &fd);
 	
@@ -91,16 +91,59 @@ static void FileGLOB(string * List, const char* Pattern){
 				string FileName = (PathSize) ? StringFormat(STR("%/%"),StringCreateWithSize(Pattern, PathSize - 1), STR(fd.cFileName)) : StringAlloc(fd.cFileName);
 				b32 ShouldAdd = true;
 				for(int i = 0; i < InitialSize; i++){
-					if(StringCompare(FileName, List[i])){
+					if(StringCompare(FileName, (*List)[i])){
 						ShouldAdd = false;
 					}
 				}
-				if(ShouldAdd) ArrayAppend(&List, &FileName);
+				if(ShouldAdd) ArrayAppend(List, &FileName);
 			}
 			
 		}while(FindNextFile(hFind, &fd)); 
 		FindClose(hFind); 
 	}
+}
+
+static void FileRecursiveGLOB(string ** List,  char* Pattern){
+	s32 InitialSize = ArraySize(*List);
+	
+	s32 PathSize = 0;
+	s32 PatternSize = CStringLenght(Pattern);
+	while(Pattern[PathSize] != '*' && Pattern[PathSize++]){}
+	WIN32_FIND_DATA Data;
+	string WildCard = StringAllocSubstr(Pattern + PathSize, PatternSize - PathSize);
+	string Path = StringFormat(STR("%/*"),StringCreateWithSize(Pattern, PathSize - 1));
+	
+    HANDLE hFindFile = FindFirstFile(Path.Base, &Data);
+    
+    int Worked = 1;
+
+    if (hFindFile != INVALID_HANDLE_VALUE) {
+		 do {
+			if ((Data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !(Data.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN)) {
+				if (!CStringCompare(Data.cFileName, ".") && !CStringCompare(Data.cFileName, "..") ) {
+					string RecurisvePattern = (PathSize) ? StringFormat(STR("%/%/%"), StringCreateWithSize(Pattern, PathSize - 1), STR(Data.cFileName), WildCard) : StringFormat(STR("%/%"), Data.cFileName, WildCard);
+					FileRecursiveGLOB(List, RecurisvePattern.Base);
+					StringFree(&RecurisvePattern);
+				}
+
+			}else{
+				s32 Offset = 0;
+				while(Data.cFileName[Offset] != '.' && Data.cFileName[Offset++]){}
+				if (CStringCompare(Data.cFileName + Offset, WildCard.Base + 1)) { 
+					string FileName = (PathSize) ? StringFormat(STR("%/%"),StringCreateWithSize(Pattern, PathSize - 1), STR(Data.cFileName)) : StringAlloc(Data.cFileName);
+					b32 ShouldAdd = true;
+					for(int i = 0; i < InitialSize; i++){
+						if(StringCompare(FileName, (*List)[i])){
+							ShouldAdd = false;
+						}
+					}
+					if(ShouldAdd) ArrayAppend(List, &FileName);
+				}
+			}
+		 }while(FindNextFile(hFindFile, &Data));
+    }
+	StringFree(&WildCard);
+	StringFree(&Path);
 }
 
 static char * EnviromentVariableGet(const char * VarName){

@@ -1,5 +1,5 @@
 static string MSVCGenerateCompilationCommand(project * Project){
-		string OutputExtension;
+	string OutputExtension;
 	switch(Project->Output){
 		
 		case OUTPUT_EXECUTABLE:{
@@ -19,8 +19,14 @@ static string MSVCGenerateCompilationCommand(project * Project){
 			ProjectAddCompilerFlags(Project, "/c");
 		}break;
 	}
+
 	
-	string TUnitPath = StringFormat(STR("%/%/"), STR(Project->OutputPath),  STR(Project->Name));
+	string TUnitPath;
+	if(Project->OutputPath){
+		TUnitPath = StringFormat(STR("%/%/"), STR(Project->OutputPath), STR(Project->Name));
+	}else{
+		TUnitPath = StringFormat(STR("%/"), STR(Project->Name));
+	}
 	FolderCreate(TUnitPath.Base);
 	
 	string SourceFiles = StringListJoin(&Project->SourceFiles, ' ');
@@ -61,7 +67,7 @@ static string MSVCGenerateCompilationCommand(project * Project){
 	string CompilationCommand;
 	
 	if(Project->Output != OUTPUT_LIBRARY){
-		CompilationCommand = StringFormat(STR("cl /nologo /FC /Fo:\"%\" /Fe:\"%\" /Fd:\"%\" % % % % /link % % % % /OUT:\"%/%/%%\""), TUnitPath, TUnitPath ,TUnitPath, CompilerFlags, Defines, SourceFiles, IncludeDirs, LinkerFlags, LibsDirs, Libs, Symbols, STR(Project->OutputPath),  STR(Project->Name), STR(Project->Name), OutputExtension);
+		CompilationCommand = StringFormat(STR("cl /nologo /FC /Fo:\"%\" /Fe:\"%\" /Fd:\"%\" % % % % /link % % % % /OUT:\"%/%%\""), TUnitPath, TUnitPath ,TUnitPath, CompilerFlags, Defines, SourceFiles, IncludeDirs, LinkerFlags, LibsDirs, Libs, Symbols, TUnitPath, STR(Project->Name), OutputExtension);
 	}else{
 		CompilationCommand = StringFormat(STR("cl /nologo /FC /Fo:\"%\" /Fe:\"%\" /Fd:\"%\" % % % %"), TUnitPath, TUnitPath ,TUnitPath, CompilerFlags, Defines, SourceFiles, IncludeDirs);
 	}
@@ -82,7 +88,6 @@ static string MSVCGenerateCompilationCommand(project * Project){
 	return CompilationCommand;
 }
 
-
 static string MSVCGenerateLinkCommand(project * Project){
 	string Libs = StringListJoin(&Project->Libs, ' ');
 	string LinkerFlags = StringListJoin(&Project->LinkerFlags, ' ');
@@ -99,7 +104,7 @@ static string MSVCGenerateLinkCommand(project * Project){
 	
 	string* RawLibsDirs = ArrayCopy(Project->LibsDirs);
 	for(int i = 0; i < ArraySize(RawLibsDirs); i++){
-		RawLibsDirs[i] = StringFormat(STR("/D%"), Project->LibsDirs[i]);
+		RawLibsDirs[i] = StringFormat(STR("/LIBPATH:%"), Project->LibsDirs[i]);
 	}
 	string LibsDirs = StringListJoin(&RawLibsDirs, ' ');
 	for_each(String, RawLibsDirs){
@@ -110,15 +115,15 @@ static string MSVCGenerateLinkCommand(project * Project){
 	
  	string TsPattern = StringFormat(STR("%/%/*.obj"), STR(Project->OutputPath), STR(Project->Name));
 	string * RawTranslationUnits = ArrayAlloc(string);
-	FileGLOB(RawTranslationUnits, TsPattern.Base);
+	FileGLOB(&RawTranslationUnits, TsPattern.Base);
 	StringFree(&TsPattern);
 	string TranslationUnits = StringListJoin(&RawTranslationUnits, ' '); 
-	for_each(String, RawLibsDirs){
+	for_each(String, RawTranslationUnits){
 		StringFree(&String);
 	}
-	ArrayFree(RawLibsDirs);
+	ArrayFree(RawTranslationUnits);
  	
-	string LinkCommand = StringFormat(STR("lib % % % % % /OUT:\"%/%/%.lib\""), TranslationUnits, LinkerFlags, LibsDirs, Libs, Symbols, STR(Project->OutputPath),  STR(Project->Name), STR(Project->Name));
+	string LinkCommand = StringFormat(STR("lib % % % % /OUT:\"%/%/%.lib\""), TranslationUnits, LibsDirs, Libs, Symbols, STR(Project->OutputPath),  STR(Project->Name), STR(Project->Name));
 	
 	StringFree(&Libs);
 	StringFree(&LibsDirs);
@@ -130,6 +135,8 @@ static string MSVCGenerateLinkCommand(project * Project){
 
 static void Compile(compilation_data Data){
 	project * Project = Data.Project;
+
+
 	string Command = MSVCGenerateCompilationCommand(Project);
 	
 #if !QUIET_MODE	
@@ -137,7 +144,6 @@ static void Compile(compilation_data Data){
 	StringPrintf(STR("\nCompilation of % started at %"), STR(Project->Name), StartTime);
 	StringFree(&StartTime);
 
-	Printf(STR("\n%\n"), Command);
 	u64 Ticks = QueryPerformanceGetCounter();
 #endif
 	//printf("Command: %s\n", Command.Base);
@@ -146,6 +152,7 @@ static void Compile(compilation_data Data){
 	
 #if !QUIET_MODE
 	Ticks = QueryPerformanceGetCounter() - Ticks;
+	Printf(STR("\n%\n"), Command);
 	string EndTime = TimeGetCurrent();
 	
 	f64 Seconds = (f64)Ticks / QueryPerfonceGetFreq();
